@@ -89,7 +89,7 @@ _sksu_find_run() {
   local sha="$1" run_id=""
   if [ -n "$sha" ]; then
     run_id=$(curl -sf --max-time 15 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-      "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/actions/workflows/build-manager.yml/runs?head_sha=${sha}&status=success&per_page=1" \
+      "https://api.github.com/repos/SukiSU-Nova/SukiSU-Nova/actions/workflows/build-manager.yml/runs?head_sha=${sha}&status=success&per_page=1" \
       | jq -r '.workflow_runs[0].id // empty' 2>/dev/null | tr -d '[:space:]' || true)
   fi
   if [ -n "$run_id" ]; then
@@ -97,21 +97,21 @@ _sksu_find_run() {
     return 0
   fi
   curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-    "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/actions/workflows/build-manager.yml/runs?status=success&branch=main&per_page=1" \
+    "https://api.github.com/repos/SukiSU-Nova/SukiSU-Nova/actions/workflows/build-manager.yml/runs?status=success&branch=main&per_page=1" \
     | jq -r '.workflow_runs[0].id // empty' 2>/dev/null | tr -d '[:space:]' || true
 }
 _sr=$(_sksu_find_run "$SKSU_SHA")
 [ -z "$SKSU_SHA" ] || [ -n "$_sr" ] || echo "[WARN] no upstream manager run for SukiSU ${SKSU_SHA}; Suki manager not attached" >&2
-SKSU_MANAGER_URL="${_sr:+https://github.com/SukiSU-Ultra/SukiSU-Ultra/actions/runs/${_sr}}"
-SKSU_MANAGER_URL="${SKSU_MANAGER_URL:-https://github.com/SukiSU-Ultra/SukiSU-Ultra/releases/latest}"
+SKSU_MANAGER_URL="${_sr:+https://github.com/SukiSU-Nova/SukiSU-Nova/actions/runs/${_sr}}"
+SKSU_MANAGER_URL="${SKSU_MANAGER_URL:-https://github.com/SukiSU-Nova/SukiSU-Nova/releases/latest}"
 SKSU_MANAGER_ARTIFACT_ID=$([ -n "$_sr" ] && \
   curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-  "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/actions/runs/${_sr}/artifacts" \
+  "https://api.github.com/repos/SukiSU-Nova/SukiSU-Nova/actions/runs/${_sr}/artifacts" \
   | jq -r '.artifacts[] | select(.name == "Manager") | select(.expired == false) | .id // empty' | head -1 || true)
 
 SKSU_MANAGER_SPOOFED_ARTIFACT_ID=$([ -n "$_sr" ] && \
   curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-  "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/actions/runs/${_sr}/artifacts" \
+  "https://api.github.com/repos/SukiSU-Nova/SukiSU-Nova/actions/runs/${_sr}/artifacts" \
   | jq -r '.artifacts[] | select(.name == "Manager-spoofed") | select(.expired == false) | .id // empty' | head -1 || true)
 
 DATE_TAG=$(date +'%Y%m%d')
@@ -172,5 +172,5 @@ else
 fi
 echo "  SUSFS   : $SUSFS_VERSION"
 echo "  KSU-Next: $KSUN_TAG"
-echo "  SukiSU-Ultra: $SKSU_TAG"
+echo "  SukiSU-Nova: $SKSU_TAG"
 echo "  Tag     : $RELEASE_TAG"

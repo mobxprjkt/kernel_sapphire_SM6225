@@ -62,10 +62,10 @@
       "github": "KernelSU-Next"
     },
     {
-      "name": "SukiSU-Ultra",
-      "url": "https://github.com/SukiSU-Ultra/SukiSU-Ultra",
-      "description": "SukiSU-Ultra implementation",
-      "github": "Baka-SU"
+      "name": "SukiSU-Nova",
+      "url": "https://github.com/SukiSU-Nova/SukiSU-Nova",
+      "description": "SukiSU-Nova implementation",
+      "github": "SukiSU-Nova"
     },
     {
       "name": "simonpunk",
