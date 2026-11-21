@@ -12,7 +12,7 @@
 **Memory**
 - MGLRU forced on (`CONFIG_LRU_GEN_ENABLED=y`)
 - [le9uo](https://github.com/firelzrd/le9uo) workingset protection
-- ZRAM multi-comp + zram-ir tiered recompression with huge/idle-page recompression — requires [Seiran Core](#seiran-core-module)
+- ZRAM multi-comp + zram-ir tiered recompression with huge/idle-page recompression (ZRAM kernel modules are bundled in the AnyKernel ZIP when built)
 - zstd upgraded to v1.5.7
 
 **I/O**
@@ -41,27 +41,6 @@
 
 ---
 
-
-## Seiran Core Module
-
-> [!CAUTION]
-> **Required — no exceptions.** Without this module, ZRAM will not work at all — `zram0` won't come up, swap won't run, and RAM management will be worse than stock.
-
-The kernel ZIP alone is not enough. `CONFIG_ZRAM=m` means `zram.ko`/`zsmalloc.ko` are loadable modules, not baked into the kernel image. Seiran Core is the KSU/Magisk module that loads them.
-
-**What it does:** loads `zram.ko` + `zsmalloc.ko` with multi-comp + zram-ir tiered recompression, then sets NAP as cpuidle governor, ADIOS as I/O scheduler, and Reflex as cpufreq governor — all at `post-fs-data`.
-
-**Download:**
-- **GitHub Release:** `seiran-core.zip` attached alongside the kernel ZIP.
-- **Telegram:** [t.me/tmplogchat](https://t.me/tmplogchat)
-
-**Install:** requires a module manager (KSU/Magisk). Install from the Modules tab — do not flash from recovery.
-- **NoKSU:** root first via Magisk or KSU-Next/SukiSU-Ultra, then install from there.
-
-> [!NOTE]
-> Universal — works across all variants (GKI × KSU-Next/SukiSU-Ultra/NoKSU).
-
----
 
 ## Droidspaces Support
 

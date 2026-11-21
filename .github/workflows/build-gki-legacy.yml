@@ -40,7 +40,7 @@ jobs:
         run: echo "start_time=$(date +%s)" >> $GITHUB_OUTPUT
 
   build:
-    name: "${{ matrix.variant.name }}"
+    name: "Build"
     needs: [setup]
     strategy:
       fail-fast: false
@@ -81,7 +81,7 @@ jobs:
     secrets: inherit
 
   release:
-    name: "Package & Release"
+    name: "Release"
     needs: [setup, build]
     if: success()
     uses: ./.github/workflows/release.yml

@@ -26,7 +26,7 @@ esac
 
 case "${KSU_TYPE}" in
   ksun) KSU_LABEL="KSU-Next" ;;
-  sksu) KSU_LABEL="SukiSU-Ultra" ;;
+  sksu) KSU_LABEL="SukiSU-Nova" ;;
   none) KSU_LABEL="NoKSU"   ;;
   *)    KSU_LABEL="${KSU_TYPE}" ;;
 esac
@@ -62,7 +62,6 @@ else
 fi
 
 cd ak3_tmp
-bash "${GITHUB_WORKSPACE}/scripts/signing/ci-sign.sh" "$PWD"
 zip -r9 "../${ZIP_NAME}" * -x .git/*
 cd ..
 rm -rf ak3_tmp

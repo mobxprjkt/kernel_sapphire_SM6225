@@ -62,10 +62,10 @@
       "github": "KernelSU-Next"
     },
     {
-      "name": "SukiSU-Ultra",
-      "url": "https://github.com/SukiSU-Ultra/SukiSU-Ultra",
-      "description": "SukiSU-Ultra implementation",
-      "github": "Baka-SU"
+      "name": "SukiSU-Nova",
+      "url": "https://github.com/SukiSU-Nova/SukiSU-Nova",
+      "description": "SukiSU-Nova implementation",
+      "github": "SukiSU-Nova"
     },
     {
       "name": "simonpunk",
@@ -104,39 +104,10 @@
       "github": null
     },
     {
-      "name": "TweetNaCl",
-      "url": "https://tweetnacl.cr.yp.to/",
-      "description": "Daniel J. Bernstein et al., Ed25519 verification for signed zips (`scripts/signing/`)",
-      "github": null
-    },
-    {
       "name": "Iconoir",
       "url": "https://github.com/iconoir-icons/iconoir",
       "description": "launcher icon glyph (MIT)",
       "github": "iconoir-icons"
-    },
-    {
-      "name": "libsu",
-      "url": "https://github.com/topjohnwu/libsu",
-      "description": "root shell library used by the app (Apache-2.0)",
-      "github": "topjohnwu"
     }
-  ],
-  "inspiration": {
-    "intro": "Design inspiration only. No code is taken from these projects.",
-    "entries": [
-      {
-        "name": "AZenith",
-        "url": "https://github.com/Liliya2727/AZenith",
-        "description": "Liliya2727 (copyright Zexshia, ArchHaven Devs), app-style home screen and structure",
-        "github": "Liliya2727"
-      },
-      {
-        "name": "Duck Detector Refactoring",
-        "url": "https://github.com/eltavine/Duck-Detector-Refactoring",
-        "description": "eltavine, contributors page idea",
-        "github": "eltavine"
-      }
-    ]
-  }
+  ]
 }

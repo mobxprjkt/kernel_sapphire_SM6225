@@ -35,7 +35,7 @@ jobs:
         id: versions
         run: bash scripts/check-sources.sh
 
-  # Build-gate: only runs when its tag actually moved. Uses GKI-KSU-Next/GKI-SukiSU-Ultra
+  # Build-gate: only runs when its tag actually moved. Uses GKI-KSU-Next/GKI-SukiSU-Nova
   # as the cheapest representative variant — goal is "does this candidate
   # compile", not a full 6-way matrix. build_type: stable so testing/ patches
   # don't add noise to the signal.
@@ -56,15 +56,15 @@ jobs:
     secrets: inherit
 
   verify-sksu:
-    name: "Verify SukiSU-Ultra candidate"
+    name: "Verify SukiSU-Nova candidate"
     needs: check
     if: needs.check.outputs.sksu_changed == 'true'
     uses: ./.github/workflows/build-kernel.yml
     with:
-      variant_name:  "Verify-SukiSU-Ultra"
+      variant_name:  "Verify-SukiSU-Nova"
       source_type:   gki
       ksu_type:      sksu
-      zip_prefix:    VERIFY_SukiSU-Ultra
+      zip_prefix:    VERIFY_SukiSU-Nova
       artifact_name: verify-sksu
       defconfig:     gki_defconfig
       build_type:    stable
@@ -113,7 +113,7 @@ jobs:
             FINAL_SKSU="$NEW_SKSU"
           else
             FINAL_SKSU="$OLD_SKSU"
-            HELD_BACK+=("SukiSU-Ultra: verify build failed, kept ${OLD_SKSU}")
+            HELD_BACK+=("SukiSU-Nova: verify build failed, kept ${OLD_SKSU}")
           fi
 
           # susfs_tag / gki_sublevel stay ungated — always take the freshly-detected value.

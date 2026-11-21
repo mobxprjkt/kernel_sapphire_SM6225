@@ -31,7 +31,7 @@ if [ "$BUILD_TYPE" = "testing" ]; then
 fi
 
 BODY="${BODY}**KSU-Next Manager:** [${KSUN_TAG:-Dev Build}](${KSUN_MANAGER_URL})"$'\n'
-BODY="${BODY}**SukiSU-Ultra Manager:** [${SKSU_TAG:-CI}](${SKSU_MANAGER_URL})"$'\n'
+BODY="${BODY}**SukiSU-Nova Manager:** [${SKSU_TAG:-CI}](${SKSU_MANAGER_URL})"$'\n'
 BODY="${BODY}**SUSFS module:** [${SUSFS_VERSION}](${SUSFS_MODULE_URL})"$'\n'
 BODY="${BODY}**Kernel base:** \`6.12.25-android16\`"$'\n'
 
@@ -41,16 +41,14 @@ else
   BODY="${BODY}**Compiler:** Neutron Clang (Clean Build)"$'\n\n'
 fi
 
-BODY="${BODY}**ZRAM Multi-Comp module:** \`seiran-core.zip\` — attached below & sent via [Telegram](https://t.me/tmplogchat)"$'\n\n'
-
 if [ "$WORKFLOW_TYPE" = "compat" ]; then
-  BODY="${BODY}**Variants:** GKI-Compat (KSU-Next · SukiSU-Ultra · NoKSU)"$'\n'
+  BODY="${BODY}**Variants:** GKI-Compat (KSU-Next · SukiSU-Nova · NoKSU)"$'\n'
   BODY="${BODY}**Supported:** Android 13+ (recommended if your ROM is A13/A14)"$'\n'
 elif [ "$WORKFLOW_TYPE" = "legacy" ]; then
   BODY="${BODY}**Variants:** GKI-Legacy (KSU-Next · BakaSU · NoKSU)"$'\n'
   BODY="${BODY}**Supported:** Android 13 / 14 only (5.15.123 ABI)"$'\n'
 else
-  BODY="${BODY}**Variants:** GKI (KSU-Next · SukiSU-Ultra · NoKSU)"$'\n'
+  BODY="${BODY}**Variants:** GKI (KSU-Next · SukiSU-Nova · NoKSU)"$'\n'
   BODY="${BODY}**Supported:** Android 15+"$'\n'
 fi
 BODY="${BODY}**ROM:** AOSP-based recommended — stock MIUI/HyperOS may have issues"$'\n'
@@ -61,8 +59,6 @@ BODY="${BODY}> [!IMPORTANT]"$'\n'
 BODY="${BODY}> **Manager version must match kernel version.** Can't grant root / manager shows errors? Use the manager links above — not stable releases. Mismatch = can't grant root."$'\n\n'
 
 BODY="${BODY}> [!NOTE]"$'\n'
-BODY="${BODY}> **ZRAM module is universal** — one \`seiran-core.zip\` works across all variants (GKI × KSU-Next/SukiSU-Ultra/NoKSU). Install it after flashing the kernel zip."$'\n\n'
-
 BODY="${BODY}**Commit:** [\`${SHORT_SHA}\`](${COMMIT_URL})"$'\n'
 BODY="${BODY}📋 **Per-build details:** [Run #${GITHUB_RUN_NUMBER} summary](${RUN_URL})"$'\n'
 BODY="${BODY}> Full build logs in \`build-audit-logs-*.zip\` below."

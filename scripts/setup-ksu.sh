@@ -18,7 +18,7 @@ git config --global advice.addEmbeddedRepo false
 cd "$KERNEL_DIR"
 
 _link_ksu_driver() {
-  local DIR="$1"   # KernelSU-Next or SukiSU-Ultra
+  local DIR="$1"   # KernelSU-Next or SukiSU-Nova
   [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ] && \
     ln -sf "../${DIR}" drivers/kernelsu
   grep -q "obj-.*kernelsu" drivers/Makefile || \
@@ -287,24 +287,24 @@ _pin_lvc_before() {
 }
 
 _pin_sksu_lvc() {
-  # SukiSU-Ultra/builtin unity build: ksu_main.c includes all .c files directly.
+  # SukiSU-Nova/builtin unity build: ksu_main.c includes all .c files directly.
   # kernel-release-spoof sets VERSION=6 PATCHLEVEL=12.
   # Any include of <linux/version.h> resets LINUX_VERSION_CODE to 6.12.
   # Pin LINUX_VERSION_CODE to 5.15.220 immediately after every <linux/version.h>
-  # include in the SukiSU-Ultra tree so the entire unity build stays on 5.15.
-  _pin_lvc_after "SukiSU-Ultra/kernel/kernel_includes.h" '#include <linux/version.h>' || return 1
-  _pin_lvc_before "SukiSU-Ultra/kernel/kernel_includes.h" '// versioned / conditional' || return 1
-  _pin_lvc_after "SukiSU-Ultra/kernel/kernel_includes.h" '#include <linux/lsm_hooks.h>' || return 1
-  _pin_lvc_after "SukiSU-Ultra/kernel/include/arch.h" '#include <linux/version.h>' || return 1
-  _pin_lvc_after "SukiSU-Ultra/kernel/manager/pkg_observer_compat.h" '#include <linux/version.h>' || return 1
-  _pin_lvc_after "SukiSU-Ultra/kernel/extension/dynamic_sig_fallback.c" '#include <linux/version.h>' || return 1
-  _pin_lvc_after "SukiSU-Ultra/kernel/extension/cpu_spoof.c" '#include <linux/version.h>' || return 1
-  _pin_lvc_after "SukiSU-Ultra/kernel/extension/kpm/compact.c" '#include "compact.h"' || return 1
-  _pin_lvc_after "SukiSU-Ultra/kernel/extension/kpm/super_access.c" '#include <linux/kprobes.h>' || return 1
-  _pin_lvc_after "SukiSU-Ultra/kernel/feature/mount_hide.c" '#include <linux/types.h>' || return 1
-  _pin_lvc_after "SukiSU-Ultra/kernel/feature/selinux_hide.c" '#include "objsec.h"' || return 1
-  _pin_lvc_after "SukiSU-Ultra/kernel/infra/symbol_resolver.c" '#include "infra/symbol_resolver.h"' || return 1
-  _pin_lvc_after "SukiSU-Ultra/kernel/preinit/preinit.c" '#include <linux/version.h>' || return 1
+  # include in the SukiSU-Nova tree so the entire unity build stays on 5.15.
+  _pin_lvc_after "SukiSU-Nova/kernel/kernel_includes.h" '#include <linux/version.h>' || return 1
+  _pin_lvc_before "SukiSU-Nova/kernel/kernel_includes.h" '// versioned / conditional' || return 1
+  _pin_lvc_after "SukiSU-Nova/kernel/kernel_includes.h" '#include <linux/lsm_hooks.h>' || return 1
+  _pin_lvc_after "SukiSU-Nova/kernel/include/arch.h" '#include <linux/version.h>' || return 1
+  _pin_lvc_after "SukiSU-Nova/kernel/manager/pkg_observer_compat.h" '#include <linux/version.h>' || return 1
+  _pin_lvc_after "SukiSU-Nova/kernel/extension/dynamic_sig_fallback.c" '#include <linux/version.h>' || return 1
+  _pin_lvc_after "SukiSU-Nova/kernel/extension/cpu_spoof.c" '#include <linux/version.h>' || return 1
+  _pin_lvc_after "SukiSU-Nova/kernel/extension/kpm/compact.c" '#include "compact.h"' || return 1
+  _pin_lvc_after "SukiSU-Nova/kernel/extension/kpm/super_access.c" '#include <linux/kprobes.h>' || return 1
+  _pin_lvc_after "SukiSU-Nova/kernel/feature/mount_hide.c" '#include <linux/types.h>' || return 1
+  _pin_lvc_after "SukiSU-Nova/kernel/feature/selinux_hide.c" '#include "objsec.h"' || return 1
+  _pin_lvc_after "SukiSU-Nova/kernel/infra/symbol_resolver.c" '#include "infra/symbol_resolver.h"' || return 1
+  _pin_lvc_after "SukiSU-Nova/kernel/preinit/preinit.c" '#include <linux/version.h>' || return 1
 }
 
 _pin_ksun_lvc() {
@@ -369,13 +369,13 @@ if [ "$KSU_TYPE" = "ksun" ]; then
 
 
 elif [ "$KSU_TYPE" = "sksu" ]; then
-  rm -rf ./KernelSU ./drivers/kernelsu ./SukiSU-Ultra
+  rm -rf ./KernelSU ./drivers/kernelsu ./SukiSU-Nova
 
   git clone --depth=1 --branch "${SKSU_TAG_PIN:-builtin}" \
-    https://github.com/SukiSU-Ultra/SukiSU-Ultra.git
-  [ -d "SukiSU-Ultra" ] || { echo "[ERROR] SukiSU-Ultra not found"; exit 1; }
+    https://github.com/SukiSU-Nova/SukiSU-Nova.git
+  [ -d "SukiSU-Nova" ] || { echo "[ERROR] SukiSU-Nova not found"; exit 1; }
 
-  cd SukiSU-Ultra
+  cd SukiSU-Nova
   git fetch --tags 2>/dev/null || true
   SKSU_TAG=$(git describe --tags --exact-match HEAD 2>/dev/null | tr -d '[:space:]')
   SKSU_TAG=${SKSU_TAG:-$(git describe --tags --abbrev=0 HEAD 2>/dev/null | tr -d '[:space:]')}
@@ -418,7 +418,7 @@ elif [ "$KSU_TYPE" = "sksu" ]; then
   _fix_susfs_log_rl_stubs || exit 1
 
   _pin_sksu_lvc || exit 1
-  _link_ksu_driver "SukiSU-Ultra/kernel"
+  _link_ksu_driver "SukiSU-Nova/kernel"
   rm -rf susfs4ksu
 
 fi

@@ -10,18 +10,32 @@ mkdir -p "$KERNEL_SRC"
 
 case "$SOURCE_TYPE" in
 
-  gki)
-    GKI_REPO="https://android.googlesource.com/kernel/common"
-    GKI_BRANCH="android13-5.15-lts"
-    echo "[GKI] Cloning $GKI_BRANCH ..."
+  
+gki)
+    GKI_REPO="https://github.com/The-Angel-Place-Sapphire/kernel_xiaomi_sapphire.git"
+    GKI_BRANCH="lineage-23.2"
+
+    echo "[GKI] Cloning $GKI_REPO ($GKI_BRANCH) ..."
+
     for attempt in 1 2 3; do
-      git clone --recursive --branch "$GKI_BRANCH" "$GKI_REPO" "$KERNEL_SRC" --depth=1 && break
-      echo "[WARN] Attempt $attempt failed, retrying in 30s..."
-      rm -rf "$KERNEL_SRC" && mkdir -p "$KERNEL_SRC"
+      if git clone --recursive \
+        --branch "$GKI_BRANCH" \
+        "$GKI_REPO" "$KERNEL_SRC" --depth=1; then
+        break
+      fi
+
+      echo "[WARN] Attempt $attempt failed"
+      rm -rf "$KERNEL_SRC"
+      mkdir -p "$KERNEL_SRC"
       sleep 30
     done
-    [ -d "$KERNEL_SRC/.git" ] || { echo "[ERROR] GKI clone failed after 3 attempts"; exit 1; }
+
+    [ -d "$KERNEL_SRC/.git" ] || {
+      echo "[ERROR] GKI clone failed after 3 attempts"
+      exit 1
+    }
     ;;
+
 
   gki-legacy)
     GKI_REPO="https://android.googlesource.com/kernel/common"
