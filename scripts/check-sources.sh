@@ -17,10 +17,10 @@ KSUN_TAG=$(_curl "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/tags"
 [ -z "$KSUN_TAG" ] && KSUN_TAG="unknown"
 echo "KSU-Next     : $KSUN_TAG"
 
-SKSU_TAG=$(_curl "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/tags" \
+SKSU_TAG=$(_curl "https://api.github.com/repos/SukiSU-Nova/SukiSU-Nova/tags" \
   | jq -r 'if type=="array" and length>0 then .[0].name else "unknown" end' 2>/dev/null || echo "unknown")
 [ -z "$SKSU_TAG" ] && SKSU_TAG="unknown"
-echo "SukiSU-Ultra : $SKSU_TAG"
+echo "SukiSU-Nova : $SKSU_TAG"
 
 SUSFS_TAG=$(_curl "https://api.github.com/repos/sidex15/susfs4ksu-module/tags" \
   | jq -r 'if type=="array" and length>0 then .[0].name else "unknown" end' 2>/dev/null \
@@ -81,9 +81,9 @@ elif [ "$KSUN_TAG" != "$PIN_KSUN" ]; then
 fi
 
 if [ "$SKSU_TAG" = "unknown" ]; then
-  FAILED+=("SukiSU-Ultra"); SKSU_TAG="$PIN_SKSU"
+  FAILED+=("SukiSU-Nova"); SKSU_TAG="$PIN_SKSU"
 elif [ "$SKSU_TAG" != "$PIN_SKSU" ]; then
-  UPDATES+=("SukiSU-Ultra: ${PIN_SKSU} → ${SKSU_TAG}")
+  UPDATES+=("SukiSU-Nova: ${PIN_SKSU} → ${SKSU_TAG}")
   SKSU_CHANGED="true"
 fi
 

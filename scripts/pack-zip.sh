@@ -26,7 +26,7 @@ esac
 
 case "${KSU_TYPE}" in
   ksun) KSU_LABEL="KSU-Next" ;;
-  sksu) KSU_LABEL="SukiSU-Ultra" ;;
+  sksu) KSU_LABEL="SukiSU-Nova" ;;
   none) KSU_LABEL="NoKSU"   ;;
   *)    KSU_LABEL="${KSU_TYPE}" ;;
 esac

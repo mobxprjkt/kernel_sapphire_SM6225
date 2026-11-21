@@ -31,7 +31,7 @@ if [ "$BUILD_TYPE" = "testing" ]; then
 fi
 
 BODY="${BODY}**KSU-Next Manager:** [${KSUN_TAG:-Dev Build}](${KSUN_MANAGER_URL})"$'\n'
-BODY="${BODY}**SukiSU-Ultra Manager:** [${SKSU_TAG:-CI}](${SKSU_MANAGER_URL})"$'\n'
+BODY="${BODY}**SukiSU-Nova Manager:** [${SKSU_TAG:-CI}](${SKSU_MANAGER_URL})"$'\n'
 BODY="${BODY}**SUSFS module:** [${SUSFS_VERSION}](${SUSFS_MODULE_URL})"$'\n'
 BODY="${BODY}**Kernel base:** \`6.12.25-android16\`"$'\n'
 
@@ -42,13 +42,13 @@ else
 fi
 
 if [ "$WORKFLOW_TYPE" = "compat" ]; then
-  BODY="${BODY}**Variants:** GKI-Compat (KSU-Next · SukiSU-Ultra · NoKSU)"$'\n'
+  BODY="${BODY}**Variants:** GKI-Compat (KSU-Next · SukiSU-Nova · NoKSU)"$'\n'
   BODY="${BODY}**Supported:** Android 13+ (recommended if your ROM is A13/A14)"$'\n'
 elif [ "$WORKFLOW_TYPE" = "legacy" ]; then
   BODY="${BODY}**Variants:** GKI-Legacy (KSU-Next · BakaSU · NoKSU)"$'\n'
   BODY="${BODY}**Supported:** Android 13 / 14 only (5.15.123 ABI)"$'\n'
 else
-  BODY="${BODY}**Variants:** GKI (KSU-Next · SukiSU-Ultra · NoKSU)"$'\n'
+  BODY="${BODY}**Variants:** GKI (KSU-Next · SukiSU-Nova · NoKSU)"$'\n'
   BODY="${BODY}**Supported:** Android 15+"$'\n'
 fi
 BODY="${BODY}**ROM:** AOSP-based recommended — stock MIUI/HyperOS may have issues"$'\n'

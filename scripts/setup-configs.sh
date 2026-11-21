@@ -145,7 +145,7 @@ CONFIG_KSU_SUSFS_SUS_SU=y
 CONFIG_BBG=y
 EOF
 
-# SukiSU-Ultra
+# SukiSU-Nova
 elif [ "$KSU_TYPE" = "sksu" ]; then
 cat >> "$CF" << 'EOF'
 CONFIG_KSU=y
