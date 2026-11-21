@@ -22,7 +22,7 @@ permissions:
 jobs:
 
   staging:
-    name: "${{ matrix.variant.name }}"
+    name: "Build"
     strategy:
       fail-fast: false
       matrix:
