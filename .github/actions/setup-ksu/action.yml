@@ -13,7 +13,7 @@ inputs:
     required: false
     default: ""
   sksu_tag_pin:
-    description: "Optional exact SukiSU-Ultra tag to checkout instead of floating HEAD (used by check-updates.yml verify gate)"
+    description: "Optional exact SukiSU-Nova tag to checkout instead of floating HEAD (used by check-updates.yml verify gate)"
     required: false
     default: ""
 

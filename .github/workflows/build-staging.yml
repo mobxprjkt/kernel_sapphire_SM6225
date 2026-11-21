@@ -31,7 +31,7 @@ jobs:
             source:   "gki"
             ksu:      "ksun"
             artifact: "staging-ksun"
-          - name:     "GKI-SukiSU-Ultra"
+          - name:     "GKI-SukiSU-Nova"
             source:   "gki"
             ksu:      "sksu"
             artifact: "staging-sksu"

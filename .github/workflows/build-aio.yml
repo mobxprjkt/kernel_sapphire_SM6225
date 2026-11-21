@@ -91,10 +91,10 @@ jobs:
             artifact:  "gki-ksun"
             defconfig: "gki_defconfig"
 
-          - name:      "GKI-SukiSU-Ultra"
+          - name:      "GKI-SukiSU-Nova"
             source:    "gki"
             ksu:       "sksu"
-            prefix:    "GKI_SukiSU-Ultra"
+            prefix:    "GKI_SukiSU-Nova"
             artifact:  "gki-sksu"
             defconfig: "gki_defconfig"
 
