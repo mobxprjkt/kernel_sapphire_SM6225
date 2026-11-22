@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Linux 5.15 compatibility fix for SukiSU-Nova AVC Log Spoofing.
-# The SUSFS static key is defined in security/selinux/avc.c; it is not
-# guaranteed to be declared in susfs_def.h. Export it through susfs.h.
+# Adapt SukiSU-Nova AVC Log Spoofing feature ID 10003 to SUSFS GKI 5.15.
+# The upstream GKI 5.15 SUSFS patch uses a shared bool, not a jump-label key.
 set -euo pipefail
 
 : "${KERNEL_DIR:?KERNEL_DIR is required}"
@@ -11,21 +10,19 @@ KSU_DIR="$KERNEL_DIR/SukiSU-Nova"
 BASE_SHA="4bec532dd447e2852aa8932afa768255350c103a"
 PR_SHA="119983f4dd8ca79dc69324cd358a73e104e35ab1"
 AVC_SOURCE="$KERNEL_DIR/security/selinux/avc.c"
+SUSFS_SOURCE="$KERNEL_DIR/fs/susfs.c"
 SUSFS_HEADER="$KERNEL_DIR/include/linux/susfs.h"
 
 [ -d "$KSU_DIR/.git" ] || {
   echo "[ERROR] SukiSU-Nova checkout not found: $KSU_DIR" >&2
   exit 1
 }
-[ -s "$AVC_SOURCE" ] || {
-  echo "[ERROR] SELinux AVC source missing: $AVC_SOURCE" >&2
-  exit 1
-}
-[ -s "$SUSFS_HEADER" ] || {
-  echo "[ERROR] SUSFS public header missing: $SUSFS_HEADER" >&2
-  echo "[INFO] Verify that SUSFS kernel_patches/include/linux files were copied." >&2
-  exit 1
-}
+for source in "$AVC_SOURCE" "$SUSFS_SOURCE" "$SUSFS_HEADER"; do
+  [ -s "$source" ] || {
+    echo "[ERROR] Required SUSFS/SELinux source missing: $source" >&2
+    exit 1
+  }
+done
 
 CURRENT_SHA="$(git -C "$KSU_DIR" rev-parse HEAD)"
 [ "$CURRENT_SHA" = "$BASE_SHA" ] || {
@@ -33,46 +30,25 @@ CURRENT_SHA="$(git -C "$KSU_DIR" rev-parse HEAD)"
   exit 1
 }
 
-# Correct check: SUSFS defines the jump-label key in avc.c.
-# The old script searched only include/linux headers and stopped too early.
-if ! grep -Eq 'DEFINE_STATIC_KEY_FALSE[[:space:]]*\([[:space:]]*susfs_is_avc_log_spoofing_enabled[[:space:]]*\)' "$AVC_SOURCE"; then
-  echo "[ERROR] SUSFS AVC static key definition is absent from security/selinux/avc.c" >&2
-  echo "[ERROR] Do not fabricate a key: re-check the selected SUSFS 5.15 patch." >&2
-  exit 1
-fi
-
-# SukiSU-Nova PR #1058 includes <linux/susfs.h>. Export the existing
-# static_key_false symbol there so avc_spoof.c can use static_branch_*().
-python3 - "$SUSFS_HEADER" <<'PY'
+# Validate the actual SUSFS GKI 5.15 ABI before changing SukiSU.
+# This branch defines and consumes a plain bool in avc.c/fs/susfs.c.
+python3 - "$AVC_SOURCE" "$SUSFS_SOURCE" <<'PY'
 from pathlib import Path
 import re, sys
 
-p = Path(sys.argv[1])
-s = p.read_text()
+avc = Path(sys.argv[1]).read_text()
+susfs = Path(sys.argv[2]).read_text()
 symbol = "susfs_is_avc_log_spoofing_enabled"
 
-if symbol not in s:
-    if "#include <linux/jump_label.h>" not in s:
-        # Add the jump-label type include immediately after the include guard.
-        m = re.search(r"(^#define[^\n]*\n)", s, re.M)
-        if not m:
-            raise SystemExit("[ERROR] Could not locate SUSFS header include guard")
-        s = s[:m.end()] + "\n#include <linux/jump_label.h>\n" + s[m.end():]
-    declaration = (
-        "\n/* SukiSU-Nova AVC Log Spoofing: key is defined in "
-        "security/selinux/avc.c. */\n"
-        "extern struct static_key_false susfs_is_avc_log_spoofing_enabled;\n"
-    )
-    # Insert before the final #endif to keep it inside the header guard.
-    pos = s.rfind("#endif")
-    if pos < 0:
-        raise SystemExit("[ERROR] SUSFS header has no final #endif")
-    s = s[:pos] + declaration + "\n" + s[pos:]
-    p.write_text(s)
-
-if "extern struct static_key_false susfs_is_avc_log_spoofing_enabled" not in s:
-    raise SystemExit("[ERROR] Failed to export SUSFS AVC static key")
-print("[OK] SUSFS AVC static key exported from include/linux/susfs.h")
+if not re.search(rf"\bbool\s+{symbol}\s*=\s*false\s*;", avc):
+    raise SystemExit("[ERROR] SUSFS GKI 5.15 bool definition is missing from security/selinux/avc.c")
+if not re.search(rf"sad->tsid\s*==\s*susfs_ksu_sid\s*&&\s*{symbol}", avc):
+    raise SystemExit("[ERROR] SUSFS AVC audit spoof hook is missing or has an unexpected form")
+if "bypass_orig_flow:" not in avc:
+    raise SystemExit("[ERROR] SUSFS AVC bypass label is missing")
+if not re.search(rf"{symbol}\s*=\s*info\.enabled", susfs):
+    raise SystemExit("[ERROR] SUSFS ioctl setter does not use the expected bool ABI")
+print("[OK] SUSFS GKI 5.15 AVC bool definition, audit hook, and ioctl setter verified")
 PY
 
 echo "[AVC] Fetching pinned SukiSU-Nova PR #1058"
@@ -101,10 +77,64 @@ git -C "$KSU_DIR" diff --binary "$BASE_SHA" "$FETCHED_SHA" -- \
 git -C "$KSU_DIR" apply --check "$PATCH_FILE"
 git -C "$KSU_DIR" apply "$PATCH_FILE"
 
+# PR #1058 expects static_key_false, but the selected SUSFS GKI 5.15 patch
+# exports a plain bool and its ioctl setter writes that bool directly. Adapt
+# only the SukiSU feature handler to the existing SUSFS ABI; do not invent a
+# second state variable or convert the SUSFS setter to jump-label operations.
+python3 - "$KSU_DIR/kernel/feature/avc_spoof.c" "$SUSFS_HEADER" <<'PY'
+from pathlib import Path
+import re, sys
+
+feature_path = Path(sys.argv[1])
+header_path = Path(sys.argv[2])
+feature = feature_path.read_text()
+header = header_path.read_text()
+symbol = "susfs_is_avc_log_spoofing_enabled"
+
+feature = feature.replace('#include <linux/jump_label.h>\n', '')
+if '#include <linux/compiler.h>' not in feature:
+    anchor = '#include "include/klog.h"'
+    if anchor not in feature:
+        raise SystemExit("[ERROR] avc_spoof.c include anchor not found")
+    feature = feature.replace(anchor, anchor + '\n#include <linux/compiler.h>', 1)
+
+feature, n1 = re.subn(
+    r'static_key_enabled\(&susfs_is_avc_log_spoofing_enabled\)',
+    f'READ_ONCE({symbol})', feature)
+feature, n2 = re.subn(
+    r'static_branch_enable\(&susfs_is_avc_log_spoofing_enabled\);',
+    f'WRITE_ONCE({symbol}, true);', feature)
+feature, n3 = re.subn(
+    r'static_branch_disable\(&susfs_is_avc_log_spoofing_enabled\);',
+    f'WRITE_ONCE({symbol}, false);', feature)
+if (n1, n2, n3) != (2, 1, 1):
+    raise SystemExit(f"[ERROR] Unexpected PR #1058 static-key API shape: reads={n1}, enable={n2}, disable={n3}")
+if 'static_branch_' in feature or 'static_key_' in feature:
+    raise SystemExit("[ERROR] Unconverted jump-label API remains in avc_spoof.c")
+if f'READ_ONCE({symbol})' not in feature or f'WRITE_ONCE({symbol}, true)' not in feature or f'WRITE_ONCE({symbol}, false)' not in feature:
+    raise SystemExit("[ERROR] Failed to adapt AVC feature handler to SUSFS bool ABI")
+feature_path.write_text(feature)
+
+# Expose the existing SUSFS bool to SukiSU's feature handler.
+declaration = f'extern bool {symbol};'
+if declaration not in header:
+    pos = header.rfind('#endif')
+    if pos < 0:
+        raise SystemExit("[ERROR] SUSFS header include guard terminator not found")
+    header = header[:pos] + '\n/* Shared AVC spoof state used by SUSFS and SukiSU-Nova. */\n' + declaration + '\n\n' + header[pos:]
+    header_path.write_text(header)
+if declaration not in header:
+    raise SystemExit("[ERROR] Failed to export SUSFS AVC bool in include/linux/susfs.h")
+print("[OK] SukiSU AVC handler adapted to SUSFS GKI 5.15 bool ABI")
+PY
+
+# Verify registration and ensure the handler uses the same SUSFS state.
 grep -q 'KSU_FEATURE_AVC_SPOOF = 10003' "$KSU_DIR/kernel/include/uapi/feature.h"
 grep -q 'name = "avc_spoof"' "$KSU_DIR/kernel/feature/avc_spoof.c"
 grep -q 'ksu_avc_spoof_init();' "$KSU_DIR/kernel/ksu_main.c"
-grep -q 'susfs_is_avc_log_spoofing_enabled' "$KSU_DIR/kernel/feature/avc_spoof.c"
+grep -q "READ_ONCE(susfs_is_avc_log_spoofing_enabled)" "$KSU_DIR/kernel/feature/avc_spoof.c"
+grep -q "WRITE_ONCE(susfs_is_avc_log_spoofing_enabled, true)" "$KSU_DIR/kernel/feature/avc_spoof.c"
+grep -q "WRITE_ONCE(susfs_is_avc_log_spoofing_enabled, false)" "$KSU_DIR/kernel/feature/avc_spoof.c"
 
 mkdir -p "$WORK_DIR"
 cat > "$WORK_DIR/avc-spoof-build-proof.txt" <<EOF
@@ -112,10 +142,13 @@ SukiSU-Nova base: $BASE_SHA
 AVC patch source: SukiSU-Nova PR #1058
 AVC patch SHA: $PR_SHA
 Feature ID: 10003
-SUSFS static key definition: security/selinux/avc.c
-SUSFS static key declaration: include/linux/susfs.h
+SUSFS branch ABI: GKI android13 5.15 shared bool
+SUSFS bool definition: security/selinux/avc.c
+SUSFS AVC hook: security/selinux/avc.c avc_audit_post_callback
+SUSFS ioctl setter: fs/susfs.c
+SukiSU feature handler: READ_ONCE/WRITE_ONCE shared bool
 EOF
 
 echo "[OK] AVC Log Spoofing handler registered (feature ID 10003)"
-echo "[OK] SUSFS static key definition and public declaration verified"
+echo "[OK] SukiSU-Nova and SUSFS share the same Linux 5.15 AVC spoof state"
 echo "[INFO] PR #1058 Linux <5.10 SELinux-hide compatibility changes remain excluded"

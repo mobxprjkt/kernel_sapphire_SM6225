@@ -46,8 +46,9 @@ The generated installer uses `do.devicecheck=1`, `do.modules=0`, `do.systemless=
 ## AVC Log Spoofing (experimental Linux 5.15 integration)
 
 - Adds SukiSU-Nova feature ID `10003` (`avc_spoof`).
-- Connects the Manager feature handler to SUSFS inline static key
-  `susfs_is_avc_log_spoofing_enabled`.
+- Connects the Manager feature handler to the existing SUSFS GKI 5.15 shared
+  boolean `susfs_is_avc_log_spoofing_enabled` (the selected branch does not
+  define a jump-label static key).
 - Uses the AVC-only changes from SukiSU-Nova PR #1058, pinned to head
   `119983f4dd8ca79dc69324cd358a73e104e35ab1` and base
   `4bec532dd447e2852aa8932afa768255350c103a`.
