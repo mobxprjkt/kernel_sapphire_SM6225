@@ -114,25 +114,6 @@ _fix_susfs_log_rl_stubs() {
   echo "[OK] susfs.c: added SUSFS_LOG*_RL stubs"
 }
 
-_pin_susfs_lvc() {
-  # kernel-release-spoof sets VERSION=6 PATCHLEVEL=12, so susfs took 6.x branches.
-  # Pin LINUX_VERSION_CODE in fs/susfs.c and include/linux/susfs.h.
-  local F="fs/susfs.c"
-  if [ -f "$F" ] && ! grep -q "sapphire: pin LINUX_VERSION_CODE" "$F"; then
-    if [ "$(grep -c '^#include "mount.h"$' "$F")" = 1 ]; then
-      sed -i '/^#include "mount.h"$/a /* sapphire: pin LINUX_VERSION_CODE to real 5.15.220 (spoofed to 6.12) */\n#undef LINUX_VERSION_CODE\n#define LINUX_VERSION_CODE KERNEL_VERSION(5, 15, 220)' "$F"
-      echo "[OK] susfs.c: LINUX_VERSION_CODE pinned to 5.15.220"
-    fi
-  fi
-  local H="include/linux/susfs.h"
-  if [ -f "$H" ] && ! grep -q "sapphire: pin LINUX_VERSION_CODE" "$H"; then
-    if [ "$(grep -c '^#include <linux/version.h>$' "$H")" = 1 ]; then
-      sed -i '/^#include <linux\/version\.h>$/a /* sapphire: pin LINUX_VERSION_CODE to real 5.15.220 (spoofed to 6.12) */\n#undef LINUX_VERSION_CODE\n#define LINUX_VERSION_CODE KERNEL_VERSION(5, 15, 220)' "$H"
-      echo "[OK] susfs.h: LINUX_VERSION_CODE pinned to 5.15.220"
-    fi
-  fi
-}
-
 _patch_susfs_def_h() {
   # Latest susfs_def.h calls current_uid() without <linux/cred.h>.
   # Breaks compile mid-file — everything declared after call site is unseen.
@@ -250,81 +231,6 @@ _checkout_pin() {
   }
 }
 
-_pin_lvc_after() {
-  local F="$1" ANCHOR="$2"
-  [ -f "$F" ] || { echo "[FAIL] _pin_lvc_after: $F not found"; return 1; }
-  if [ "$(grep -cFx -- "$ANCHOR" "$F")" != 1 ]; then
-    echo "[FAIL] _pin_lvc_after: expected exactly 1 '$ANCHOR' in $F"
-    return 1
-  fi
-  # skip if pin already exists immediately after this specific anchor
-  if grep -A1 -Fx -- "$ANCHOR" "$F" | grep -q "sapphire: pin LINUX_VERSION_CODE"; then
-    return 0
-  fi
-  if [ "$(grep -cFx -- "$ANCHOR" "$F")" != 1 ]; then
-    echo "[FAIL] _pin_lvc_after: expected exactly 1 '$ANCHOR' in $F"
-    return 1
-  fi
-  awk -v a="$ANCHOR" '{ print } $0 == a { print "/* sapphire: pin LINUX_VERSION_CODE to real 5.15.220 (spoofed to 6.12) */"; print "#undef LINUX_VERSION_CODE"; print "#define LINUX_VERSION_CODE KERNEL_VERSION(5, 15, 220)" }' "$F" > "$F.sapphire.tmp" \
-    && cat "$F.sapphire.tmp" > "$F" && rm -f "$F.sapphire.tmp"
-  echo "[OK] $F: LINUX_VERSION_CODE pinned to 5.15.220"
-}
-
-_pin_lvc_before() {
-  local F="$1" ANCHOR="$2"
-  [ -f "$F" ] || { echo "[FAIL] _pin_lvc_before: $F not found"; return 1; }
-  if [ "$(grep -cF -- "$ANCHOR" "$F")" != 1 ]; then
-    echo "[FAIL] _pin_lvc_before: expected exactly 1 '$ANCHOR' in $F"
-    return 1
-  fi
-  # skip if pin already exists immediately before this specific anchor
-  if grep -B1 -F -- "$ANCHOR" "$F" | grep -q "sapphire: pin LINUX_VERSION_CODE"; then
-    return 0
-  fi
-  awk -v a="$ANCHOR" '{ if ($0 == a) { print "/* sapphire: pin LINUX_VERSION_CODE to real 5.15.220 (spoofed to 6.12) */"; print "#undef LINUX_VERSION_CODE"; print "#define LINUX_VERSION_CODE KERNEL_VERSION(5, 15, 220)" } print }' "$F" > "$F.sapphire.tmp" \
-    && cat "$F.sapphire.tmp" > "$F" && rm -f "$F.sapphire.tmp"
-  echo "[OK] $F: LINUX_VERSION_CODE pinned before '$ANCHOR'"
-}
-
-_pin_sksu_lvc() {
-  # SukiSU-Nova/builtin unity build: ksu_main.c includes all .c files directly.
-  # kernel-release-spoof sets VERSION=6 PATCHLEVEL=12.
-  # Any include of <linux/version.h> resets LINUX_VERSION_CODE to 6.12.
-  # Pin LINUX_VERSION_CODE to 5.15.220 immediately after every <linux/version.h>
-  # include in the SukiSU-Nova tree so the entire unity build stays on 5.15.
-  _pin_lvc_after "SukiSU-Nova/kernel/kernel_includes.h" '#include <linux/version.h>' || return 1
-  _pin_lvc_before "SukiSU-Nova/kernel/kernel_includes.h" '// versioned / conditional' || return 1
-  _pin_lvc_after "SukiSU-Nova/kernel/kernel_includes.h" '#include <linux/lsm_hooks.h>' || return 1
-  _pin_lvc_after "SukiSU-Nova/kernel/include/arch.h" '#include <linux/version.h>' || return 1
-  _pin_lvc_after "SukiSU-Nova/kernel/manager/pkg_observer_compat.h" '#include <linux/version.h>' || return 1
-  _pin_lvc_after "SukiSU-Nova/kernel/extension/dynamic_sig_fallback.c" '#include <linux/version.h>' || return 1
-  _pin_lvc_after "SukiSU-Nova/kernel/extension/cpu_spoof.c" '#include <linux/version.h>' || return 1
-  _pin_lvc_after "SukiSU-Nova/kernel/extension/kpm/compact.c" '#include "compact.h"' || return 1
-  _pin_lvc_after "SukiSU-Nova/kernel/extension/kpm/super_access.c" '#include <linux/kprobes.h>' || return 1
-  _pin_lvc_after "SukiSU-Nova/kernel/feature/mount_hide.c" '#include <linux/types.h>' || return 1
-  _pin_lvc_after "SukiSU-Nova/kernel/feature/selinux_hide.c" '#include "objsec.h"' || return 1
-  _pin_lvc_after "SukiSU-Nova/kernel/infra/symbol_resolver.c" '#include "infra/symbol_resolver.h"' || return 1
-  _pin_lvc_after "SukiSU-Nova/kernel/preinit/preinit.c" '#include <linux/version.h>' || return 1
-}
-
-_pin_ksun_lvc() {
-  # KernelSU-Next takes the 6.12 LSM static_call path under the release spoof.
-  _pin_lvc_after "KernelSU-Next/kernel/hook/lsm_hook.h" '#include <linux/version.h>' || return 1
-  _pin_lvc_after "KernelSU-Next/kernel/hook/lsm_hook.c" '#include "klog.h" // IWYU pragma: keep' || return 1
-  _pin_lvc_after "KernelSU-Next/kernel/infra/file_wrapper.c" '#include "infra/file_wrapper.h"' || return 1
-  _pin_lvc_after "KernelSU-Next/kernel/extras.c" '#include "arch.h"' || return 1
-  _pin_lvc_after "KernelSU-Next/kernel/feature/selinux_hide.c" '#include "hook/lsm_hook.h"' || return 1
-  _pin_lvc_after "KernelSU-Next/kernel/infra/seccomp_cache.c" '#include "infra/seccomp_cache.h"' || return 1
-  _pin_lvc_after "KernelSU-Next/kernel/infra/symbol_resolver.c" '#include "infra/symbol_resolver.h"' || return 1
-  _pin_lvc_after "KernelSU-Next/kernel/manager/apk_sign.c" '#include <linux/version.h>' || return 1
-  _pin_lvc_after "KernelSU-Next/kernel/manager/pkg_observer.c" '#include "manager/throne_tracker.h"' || return 1
-  _pin_lvc_after "KernelSU-Next/kernel/manager/throne_tracker.c" '#include "manager/throne_tracker.h"' || return 1
-  _pin_lvc_after "KernelSU-Next/kernel/policy/app_profile.c" '#include "hook/tp_marker.h"' || return 1
-  _pin_lvc_after "KernelSU-Next/kernel/selinux/rules.c" '#include "xfrm.h"' || return 1
-  _pin_lvc_after "KernelSU-Next/kernel/selinux/sepolicy.c" '#include "ss/symtab.h"' || return 1
-  _pin_lvc_after "KernelSU-Next/kernel/compat/samsung_kdp.c" '#include <linux/version.h>' || return 1
-}
-
 if [ "$KSU_TYPE" = "ksun" ]; then
   rm -rf ./KernelSU ./drivers/kernelsu ./KernelSU-Next
   curl -LSs "https://raw.githubusercontent.com/pershoot/KernelSU-Next/dev-susfs/kernel/setup.sh" \
@@ -358,9 +264,7 @@ if [ "$KSU_TYPE" = "ksun" ]; then
   cp -f susfs4ksu/kernel_patches/fs/*            fs/
   cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
   _patch_susfs_def_h
-  _pin_susfs_lvc
   _fix_susfs_log_rl_stubs || exit 1
-  _pin_ksun_lvc
   _fix_susfs_fake_state
 
   _inject_susfs_init "KernelSU-Next/kernel/ksu.c"
@@ -414,10 +318,8 @@ elif [ "$KSU_TYPE" = "sksu" ]; then
   cp -f susfs4ksu/kernel_patches/fs/*            fs/
   cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
   _patch_susfs_def_h
-  _pin_susfs_lvc
   _fix_susfs_log_rl_stubs || exit 1
 
-  _pin_sksu_lvc || exit 1
   _link_ksu_driver "SukiSU-Nova/kernel"
   rm -rf susfs4ksu
 

@@ -33,7 +33,7 @@ fi
 BODY="${BODY}**KSU-Next Manager:** [${KSUN_TAG:-Dev Build}](${KSUN_MANAGER_URL})"$'\n'
 BODY="${BODY}**SukiSU-Nova Manager:** [${SKSU_TAG:-CI}](${SKSU_MANAGER_URL})"$'\n'
 BODY="${BODY}**SUSFS module:** [${SUSFS_VERSION}](${SUSFS_MODULE_URL})"$'\n'
-BODY="${BODY}**Kernel base:** \`6.12.25-android16\`"$'\n'
+BODY="${BODY}**Kernel base:** \`5.15-android13 (GKI)\`"$'\n'
 
 if [ "${USE_CCACHE:-false}" = "true" ]; then
   BODY="${BODY}**Compiler:** Neutron Clang (Ccache Accelerated)"$'\n\n'
