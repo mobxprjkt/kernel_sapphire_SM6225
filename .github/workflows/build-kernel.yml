@@ -1,210 +1,83 @@
-name: "Build Kernel (reusable)"
+name: "Build Kernel — SukiSU-Nova + SUSFS + KPM"
 
 on:
   workflow_call:
     inputs:
-      variant_name:  { type: string, required: true }
-      source_type:   { type: string, required: true }   # gki | gki-legacy
-      ksu_type:      { type: string, required: true }   # ksun | sksu | none
-      zip_prefix:    { type: string, required: true }
-      artifact_name: { type: string, required: true }
-      defconfig:     { type: string, required: true }
-      build_type:    { type: string, required: true }   # stable | testing
-      notify:        { type: boolean, default: true }
-      use_ccache:    { type: boolean, default: false }
-      ksun_tag_pin:  { type: string, required: false, default: "" }  # verify-gate only
-      sksu_tag_pin:  { type: string, required: false, default: "" }  # verify-gate only
+      variant_name:
+        type: string
+        required: true
+      artifact_name:
+        type: string
+        required: true
+      defconfig:
+        type: string
+        required: true
 
 env:
-  OUT_DIR: "out"
+  OUT_DIR: out
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   build:
     name: "${{ inputs.variant_name }}"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      actions: read
     env:
-      WORK_DIR:   ${{ github.workspace }}
+      WORK_DIR: ${{ github.workspace }}
       KERNEL_SRC: ${{ github.workspace }}/kernel_src
-
+      SOURCE_TYPE: gki
+      KSU_TYPE: sksu
+      DEFCONFIG: ${{ inputs.defconfig }}
     steps:
-      - name: "Checkout"
+      - name: Checkout
         uses: actions/checkout@v4.2.2
         with:
           fetch-depth: 1
 
-      - name: "Setup env"
-        uses: ./.github/actions/setup-env
+      - name: Setup build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            aria2 bc bison build-essential flex git libelf-dev libssl-dev \
+            curl jq zstd dwarves zip patch gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
 
-      - name: "Clone kernel source"
-        env:
-          SOURCE_TYPE:   ${{ inputs.source_type }}
-          KSU_TYPE:      ${{ inputs.ksu_type }}
+      - name: Clone Linux 5.15 GKI source
         run: bash scripts/clone-source.sh
 
-      - name: "Fix source warnings"
-        run: bash scripts/fix-source-warnings.sh "${{ env.KERNEL_SRC }}"
-
-      - name: "Configure ccache"
-        if: inputs.use_ccache == true
-        run: |
-          sudo apt-get install -y ccache
-          echo "CCACHE_DIR=$HOME/.ccache"                                                                          >> $GITHUB_ENV
-          echo "CCACHE_MAXSIZE=5G"                                                                                 >> $GITHUB_ENV
-          echo "CCACHE_COMPILERCHECK=content"                                                                      >> $GITHUB_ENV
-          echo "CCACHE_DIRECT=true"                                                                                >> $GITHUB_ENV
-          echo "CCACHE_BASEDIR=${{ github.workspace }}"                                                            >> $GITHUB_ENV
-          echo "CCACHE_IGNOREOPTIONS=--sysroot*"                                                                   >> $GITHUB_ENV
-          echo "CCACHE_COMPRESSION=true"                                                                           >> $GITHUB_ENV
-          echo "CCACHE_COMPRESSLEVEL=5"                                                                            >> $GITHUB_ENV
-          echo "CCACHE_IS_KERNEL_COMPILING=true"                                                                   >> $GITHUB_ENV
-          echo "CCACHE_SLOPPINESS=include_file_mtime,include_file_ctime,time_macros"                                >> $GITHUB_ENV
-
-      - name: "Restore ccache"
-        if: inputs.use_ccache == true
-        id: ccache-restore
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.ccache
-          key: ccache-${{ runner.os }}-${{ inputs.source_type }}-${{ inputs.ksu_type }}-${{ github.sha }}
-          restore-keys: |
-            ccache-${{ runner.os }}-${{ inputs.source_type }}-${{ inputs.ksu_type }}-
-
-      - name: "Setup toolchain"
-        env:
-          SOURCE_TYPE: ${{ inputs.source_type }}
+      - name: Setup Clang
         run: bash scripts/setup-toolchain.sh
 
-      - name: "Apply patches"
+      - name: Integrate SukiSU-Nova + SUSFS
         env:
-          SOURCE_TYPE: ${{ inputs.source_type }}
-          KSU_TYPE:    ${{ inputs.ksu_type }}
-          BUILD_TYPE:  ${{ inputs.build_type }}
-          DEFCONFIG:   ${{ inputs.defconfig }}
-        run: |
-          set -o pipefail
-          bash scripts/apply-patches.sh
+          KERNEL_DIR: ${{ env.KERNEL_SRC }}
+          WORK_DIR: ${{ env.WORK_DIR }}
+        run: bash scripts/setup-ksu.sh
 
-      - name: "Setup KSU + SUSFS"
-        if: inputs.ksu_type != 'none'
-        uses: ./.github/actions/setup-ksu
-        with:
-          ksu_type:     ${{ inputs.ksu_type }}
-          kernel_dir:   ${{ env.KERNEL_SRC }}
-          work_dir:     ${{ env.WORK_DIR }}
-          ksun_tag_pin: ${{ inputs.ksun_tag_pin }}
-          sksu_tag_pin: ${{ inputs.sksu_tag_pin }}
-
-      - name: "Droidspaces"
-        if: inputs.source_type != 'kernel-org'
-        working-directory: ${{ env.KERNEL_SRC }}
-        run: |
-          bash ${{ github.workspace }}/scripts/droidspaces.sh \
-            "arch/arm64/configs/${{ inputs.defconfig }}"
-
-      - name: "Kernel configs"
-        uses: ./.github/actions/setup-configs
-        with:
-          ksu_type:     ${{ inputs.ksu_type }}
-          source_type:  ${{ inputs.source_type }}
-          defconfig:    ${{ env.KERNEL_SRC }}/arch/arm64/configs/${{ inputs.defconfig }}
-          kernel_dir:   ${{ env.KERNEL_SRC }}
-
-      - name: "Localversion"
-        working-directory: ${{ env.KERNEL_SRC }}
-        run: |
-          SHORT_SHA="${{ github.sha }}"
-          SHORT_SHA="${SHORT_SHA:0:8}"
-          sed -i 's/-dirty//' ./scripts/setlocalversion
-          KERNEL_TIMESTAMP=$(git log -1 --format=%ct)
-          echo "KBUILD_BUILD_TIMESTAMP=$(date -u -d @${KERNEL_TIMESTAMP} +'%a %b %d %T UTC %Y')" >> $GITHUB_ENV
-          echo "SOURCE_DATE_EPOCH=${KERNEL_TIMESTAMP}" >> $GITHUB_ENV
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add . && git commit -m "clean dirty flag" || true
-          echo "+" > .scmversion
-
-      - name: "Build kernel"
-        id: build
-        timeout-minutes: 50
+      - name: Enable SukiSU-Nova + SUSFS + KPM
         env:
-          SOURCE_TYPE:  ${{ inputs.source_type }}
-          KSU_TYPE:     ${{ inputs.ksu_type }}
-          DEFCONFIG:    ${{ inputs.defconfig }}
-          VARIANT:      ${{ inputs.variant_name }}
-          USE_CCACHE:   ${{ inputs.use_ccache == true }}
+          KERNEL_SRC: ${{ env.KERNEL_SRC }}
+          DEFCONFIG: ${{ env.DEFCONFIG }}
         run: |
-          set -o pipefail
-          bash scripts/build.sh
+          DEFCONFIG="$KERNEL_SRC/arch/arm64/configs/$DEFCONFIG" \
+            bash scripts/setup-configs.sh
 
-      - name: "Save ccache"
-        if: inputs.use_ccache == true && steps.ccache-restore.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ~/.ccache
-          key: ccache-${{ runner.os }}-${{ inputs.source_type }}-${{ inputs.ksu_type }}-${{ github.sha }}
+      - name: Build kernel
+        run: bash scripts/build.sh
 
-      - name: "Verify kernel"
-        run: |
-          set -o pipefail
-          bash scripts/verify-kernel.sh
+      - name: Verify kernel
+        run: bash scripts/verify-kernel.sh
 
-
-      - name: "Notify variant failure"
-        if: failure()
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
-          TELEGRAM_TOPIC_ID:  ${{ secrets.TELEGRAM_TOPIC_ID }}
-          VARIANT:     ${{ inputs.variant_name }}
-          SOURCE_TYPE: ${{ inputs.source_type }}
-          BUILD_TYPE:  ${{ inputs.build_type }}
-          RUN_URL:     "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          RUN_NUMBER:  ${{ github.run_number }}
-          NOTIFY_ENABLED: ${{ inputs.notify }}
-        run: bash scripts/notify.sh variant-failure
-
-
-      - name: "Pack ZIP"
-        env:
-          ZIP_PREFIX:  ${{ inputs.zip_prefix }}
-          KSU_TYPE:    ${{ inputs.ksu_type }}
-          BUILD_TYPE:  ${{ inputs.build_type }}
-          SOURCE_TYPE: ${{ inputs.source_type }}
+      - name: Package AnyKernel3 ZIP
         run: bash scripts/pack-zip.sh
 
-      - name: "Capture uname"
-        run: |
-          UNAME=$(grep UTS_RELEASE \
-            ${{ env.WORK_DIR }}/out/dist/include/generated/utsrelease.h 2>/dev/null \
-            | cut -d'"' -f2 || echo "unknown")
-          mkdir -p ${{ env.KERNEL_SRC }}/out/dist
-          echo "$UNAME" > ${{ env.KERNEL_SRC }}/out/dist/kernel_uname.txt
-          echo "$UNAME" > ${{ env.KERNEL_SRC }}/out/dist/kernel_version.txt
-          echo "Kernel uname: $UNAME"
-
-
-      - name: "Stage artifact"
-        run: |
-          STAGE="${{ env.WORK_DIR }}/artifact-stage"
-          mkdir -p "$STAGE"
-          [ -f "${{ env.WORK_DIR }}/${{ env.ZIP_NAME }}" ] && \
-            cp "${{ env.WORK_DIR }}/${{ env.ZIP_NAME }}" "$STAGE/"
-          [ -f "${{ env.KERNEL_SRC }}/out/dist/kernel_version.txt" ] && \
-            cp "${{ env.KERNEL_SRC }}/out/dist/kernel_version.txt" "$STAGE/"
-          [ -f "${{ env.KERNEL_SRC }}/out/dist/kernel_uname.txt" ] && \
-            cp "${{ env.KERNEL_SRC }}/out/dist/kernel_uname.txt" "$STAGE/"
-          for f in ksun_tag.txt ksun_sha.txt ksun_version.txt \
-                   sksu_tag.txt sksu_sha.txt sksu_version.txt; do
-            [ -f "${{ env.WORK_DIR }}/$f" ] && \
-              cp "${{ env.WORK_DIR }}/$f" "$STAGE/" || true
-          done
-          echo "--- artifact-stage contents ---"
-          ls -lh "$STAGE"
-
-      - name: "Upload artifact"
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4.6.2
         with:
           name: ${{ inputs.artifact_name }}
-          path: ${{ env.WORK_DIR }}/artifact-stage/
-          retention-days: 1
+          path: |
+            ${{ github.workspace }}/AK3-*.zip
+            ${{ github.workspace }}/out/dist/Image
+            ${{ github.workspace }}/out/dist/kernel_version.txt
+          retention-days: 7

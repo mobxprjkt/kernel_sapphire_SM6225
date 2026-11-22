@@ -1,328 +1,121 @@
 #!/usr/bin/env bash
-# setup-ksu.sh — integrate KSU variant + SUSFS into kernel source
-# env: KSU_TYPE (ksun|sksu|none), KERNEL_DIR, WORK_DIR
-# optional env: KSUN_TAG_PIN, SKSU_TAG_PIN — if set, checkout that exact tag
-#   instead of floating branch HEAD. Used only by check-updates.yml's verify
-#   gate to test a specific candidate tag before it's committed to
-#   source-pins.json. Normal builds never set these, so day-to-day behavior
-#   (float + record detected tag) is unchanged.
-set -e
+# Integrate only SukiSU-Nova + SUSFS for Android 13 / Linux 5.15.
+set -euo pipefail
 
-: "${KSU_TYPE:?}"
 : "${KERNEL_DIR:?}"
 : "${WORK_DIR:?}"
+KSU_TYPE="sksu"
+
+cd "$KERNEL_DIR"
+rm -rf ./KernelSU ./KernelSU-Next ./drivers/kernelsu ./SukiSU-Nova ./susfs4ksu
 
 git config --global init.defaultBranch main
 git config --global advice.addEmbeddedRepo false
 
-cd "$KERNEL_DIR"
-
-_link_ksu_driver() {
-  local DIR="$1"   # KernelSU-Next or SukiSU-Nova
-  [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ] && \
-    ln -sf "../${DIR}" drivers/kernelsu
-  grep -q "obj-.*kernelsu" drivers/Makefile || \
-    echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
-  grep -q "kernelsu/Kconfig" drivers/Kconfig || \
-    echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
+echo "=== Clone SukiSU-Nova ==="
+git clone --depth=1 --branch builtin \
+  https://github.com/SukiSU-Nova/SukiSU-Nova.git
+[ -d "SukiSU-Nova/kernel" ] || {
+  echo "[ERROR] SukiSU-Nova kernel directory not found" >&2
+  exit 1
 }
 
-_fix_susfs_fake_state() {
-  # Replace fake_state with selinux_state (pershoot KSU-Next dropped fake_state)
-  for f in security/selinux/hooks.c security/selinux/selinuxfs.c; do
-    [ -f "$f" ] || continue
-    python3 - "$f" <<'EOF'
-import sys, subprocess
-path = sys.argv[1]
-src = open(path).read()
-replacements = [
-    ('#ifdef CONFIG_KSU_SUSFS\nextern struct selinux_state fake_state;\nextern bool ksu_selinux_hide_running __read_mostly;\n#endif // #ifdef CONFIG_KSU_SUSFS',
-     '#ifdef CONFIG_KSU_SUSFS\nextern bool ksu_selinux_hide_running __read_mostly;\n#endif // #ifdef CONFIG_KSU_SUSFS'),
-    ('int fake_error = security_context_to_sid(&fake_state, value, size, &tmp_sid, GFP_KERNEL);',
-     'int fake_error = security_context_to_sid(&selinux_state, value, size, &tmp_sid, GFP_KERNEL);'),
-    ('extern struct selinux_state fake_state;\n',
-     ''),
-    ('security_context_to_sid(&fake_state, buf, size, &sid, GFP_KERNEL)',
-     'security_context_to_sid(&selinux_state, buf, size, &sid, GFP_KERNEL)'),
-    ('security_sid_to_context(&fake_state, sid, &canon, &len)',
-     'security_sid_to_context(&selinux_state, sid, &canon, &len)'),
-    ('security_context_str_to_sid(&fake_state, scon, &ssid, GFP_KERNEL)',
-     'security_context_str_to_sid(&selinux_state, scon, &ssid, GFP_KERNEL)'),
-    ('security_context_str_to_sid(&fake_state, tcon, &tsid, GFP_KERNEL)',
-     'security_context_str_to_sid(&selinux_state, tcon, &tsid, GFP_KERNEL)'),
-    ('security_compute_av_user(&fake_state, ssid, tsid, tclass, &avd)',
-     'security_compute_av_user(&selinux_state, ssid, tsid, tclass, &avd)'),
-]
-for old, new in replacements:
-    if old in src:
-        src = src.replace(old, new)
-open(path, 'w').write(src)
-result = subprocess.run(['grep', '-n', 'fake_state', path], capture_output=True, text=True)
-if result.stdout:
-    print(f'[FAIL] fake_state still in {path}')
-else:
-    print(f'[OK] fake_state -> selinux_state in {path}')
-EOF
-  done
+cd SukiSU-Nova
+git fetch --tags 2>/dev/null || true
+SKSU_TAG=$(git describe --tags --exact-match HEAD 2>/dev/null || \
+  git describe --tags --abbrev=0 HEAD 2>/dev/null || echo "builtin")
+SKSU_SHA=$(git rev-parse HEAD)
+cd ..
+
+printf '%s\n' "$SKSU_TAG" > "$WORK_DIR/sksu_tag.txt"
+printf '%s\n' "$SKSU_SHA" > "$WORK_DIR/sksu_sha.txt"
+echo "SKSU_TAG=$SKSU_TAG" >> "${GITHUB_ENV:-/dev/null}"
+echo "SKSU_SHA=$SKSU_SHA" >> "${GITHUB_ENV:-/dev/null}"
+echo "[OK] SukiSU-Nova: $SKSU_TAG ($SKSU_SHA)"
+
+echo "=== Clone SUSFS branch gki-android13-5.15 ==="
+git clone --depth=1 -b gki-android13-5.15 \
+  https://gitlab.com/simonpunk/susfs4ksu.git
+SUSFS_COMMIT=$(git -C susfs4ksu rev-parse --short HEAD 2>/dev/null || echo "unknown")
+echo "SUSFS_COMMIT=$SUSFS_COMMIT" >> "${GITHUB_ENV:-/dev/null}"
+echo "[OK] SUSFS commit: $SUSFS_COMMIT"
+
+SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
+[ -f "$SUSFS_PATCH" ] || {
+  echo "[ERROR] SUSFS 5.15 patch not found: $SUSFS_PATCH" >&2
+  exit 1
 }
 
-_inject_susfs_init() {
-  local KSU_C="$1"
-  [ ! -f "$KSU_C" ] && return 0
-  grep -q "susfs_init" "$KSU_C" && return 0
-
-  # inject include
-  if ! grep -q "#include <linux/susfs.h>" "$KSU_C"; then
-    if grep -q '#include "ksu.h"' "$KSU_C"; then
-      sed -i '/#include "ksu.h"/a #include <linux\/susfs.h>' "$KSU_C"
-    else
-      sed -i '1i#include <linux/susfs.h>' "$KSU_C"
-    fi
-  fi
-
-  # inject susfs_init() — 3 fallback anchors
-  if grep -q "ksu_feature_init();" "$KSU_C"; then
-    awk '/ksu_feature_init\(\);/{print; printf "#ifdef CONFIG_KSU_SUSFS\n\tsusfs_init();\n#endif\n"; next}1' "$KSU_C" > "$KSU_C.tmp" && mv "$KSU_C.tmp" "$KSU_C"
-  elif grep -q "ksu_supercalls_init();" "$KSU_C"; then
-    awk '/ksu_supercalls_init\(\);/{printf "#ifdef CONFIG_KSU_SUSFS\n\tsusfs_init();\n#endif\n"; print; next}1' "$KSU_C" > "$KSU_C.tmp" && mv "$KSU_C.tmp" "$KSU_C"
-  elif grep -q "ksu_core_init();" "$KSU_C"; then
-    awk '/ksu_core_init\(\);/{print; printf "#ifdef CONFIG_KSU_SUSFS\n\tsusfs_init();\n#endif\n"; next}1' "$KSU_C" > "$KSU_C.tmp" && mv "$KSU_C.tmp" "$KSU_C"
-  else
-    echo "[ERROR] _inject_susfs_init: no anchor found in $KSU_C"; return 1
-  fi
-
-  if grep -q "susfs_init" "$KSU_C"; then
-    echo "[OK] susfs_init injected into $KSU_C"
-  else
-    echo "[ERROR] susfs_init injection failed in $KSU_C"; return 1
-  fi
-}
-
-
-# KernelSU-Next
-_fix_susfs_log_rl_stubs() {
-  # susfs4ksu 41da83f added SUSFS_LOGI_RL/LOGE_RL but defined them only when
-  # CONFIG_KSU_SUSFS_ENABLE_LOG=y; the !ENABLE_LOG branch has no stubs.
-  local F="fs/susfs.c"
-  [ -f "$F" ] || return 0
-  grep -qE '^#define SUSFS_LOGI_RL\(fmt, \.\.\.\)[[:space:]]*$' "$F" && return 0
-  if [ "$(grep -cxF '#define SUSFS_LOGE(fmt, ...) ' "$F")" != 1 ]; then
-    echo "[FAIL] _fix_susfs_log_rl_stubs: expected exactly 1 empty SUSFS_LOGE stub in $F"
-    return 1
-  fi
-  sed -i '/^#define SUSFS_LOGE(fmt, \.\.\.) $/a #define SUSFS_LOGI_RL(fmt, ...) \n#define SUSFS_LOGE_RL(fmt, ...) ' "$F"
-  echo "[OK] susfs.c: added SUSFS_LOG*_RL stubs"
-}
-
-_patch_susfs_def_h() {
-  # Latest susfs_def.h calls current_uid() without <linux/cred.h>.
-  # Breaks compile mid-file — everything declared after call site is unseen.
-  local DEF_H="include/linux/susfs_def.h"
-  [ -f "$DEF_H" ] || return 0
-  grep -q "linux/cred.h" "$DEF_H" && return 0
-  sed -i '1i #include <linux/cred.h>' "$DEF_H"
-  echo "[OK] susfs_def.h: added linux/cred.h"
-}
-
-
-_patch_namespace_gki_hunk1() {
-  # susfs patch hunk#1 fails on GKI: trace/hooks/blk.h shifts context lines.
-  # Manually applies the rejected include + extern decls + CL_COPY_MNT_NS define.
-  grep -q "susfs_def.h" fs/namespace.c && return 0
-  python3 - <<'EOF'
-txt = open("fs/namespace.c").read()
-txt = txt.replace(
-    "#include <linux/mnt_idmapping.h>",
-    "#include <linux/mnt_idmapping.h>\n\n"
-    "#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT\n"
-    "#include <linux/susfs_def.h>\n"
-    "#endif",
-    1
-)
-txt = txt.replace(
-    '#include "internal.h"',
-    '#include "internal.h"\n\n'
-    "#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT\n"
-    "extern bool susfs_is_current_ksu_domain(void);\n"
-    "extern struct static_key_true susfs_is_sdcard_android_data_not_decrypted;\n\n"
-    "#define CL_COPY_MNT_NS BIT(25)\n\n"
-    "#endif",
-    1
-)
-open("fs/namespace.c", "w").write(txt)
-print("[OK] namespace.c: hunk#1 applied manually")
-EOF
-}
-
-_fix_ksu_umount_missing_set() {
-    # official KernelSU main repo") dropped kernel_umount_feature_set()'s
-  # definition but left the struct reference to it -- breaks compile.
-  # Still unfixed on builtin HEAD as of 2026-09-04. Self-deactivates once
-  # upstream restores the definition (grep guard below).
-  local KU_C="$1"
-  [ -f "$KU_C" ] || return 0
-  grep -q "kernel_umount_feature_set" "$KU_C" || return 0
-  grep -q "static int kernel_umount_feature_set" "$KU_C" && return 0
-  python3 - "$KU_C" <<'EOF'
-import sys
-path = sys.argv[1]
-txt = open(path).read()
-marker = "static int kernel_umount_feature_get(u64 *value)"
-idx = txt.find(marker)
-if idx == -1:
-    print("[WARN] kernel_umount.c: get_handler anchor not found, skipping umount fix")
-    sys.exit(0)
-end = txt.find("\n}\n", idx) + 3
-insert = (
-    "\nstatic int kernel_umount_feature_set(u64 value)\n"
-    "{\n"
-    "    bool enable = value != 0;\n"
-    "    ksu_kernel_umount_enabled = enable;\n"
-    "    pr_info(\"kernel_umount: set to %d\\n\", enable);\n"
-    "    return 0;\n"
-    "}\n"
-)
-txt = txt[:end] + insert + txt[end:]
-open(path, "w").write(txt)
-print("[OK] kernel_umount.c: restored missing kernel_umount_feature_set")
-EOF
-}
-
-_fix_susfs_exec_sksu() {
-  # ShirkNeko SUSFS patch injects ksu_handle_execveat / ksu_install_su_fd
-  # (syscall_event_bridge.c) and never ships these symbols. Strip all
-  # CONFIG_KSU_SUSFS blocks from exec.c except the susfs_def.h include.
-  # Self-deactivates if exec.c no longer has the markers.
-  local EXEC_C="fs/exec.c"
-  [ -f "$EXEC_C" ] || return 0
-  grep -q "ksu_install_su_fd\|ksu_handle_execveat" "$EXEC_C" || return 0
-  python3 - <<PYEOF "$EXEC_C"
-import sys, re
-path = sys.argv[1]
-txt = open(path).read()
-
-txt = re.sub(
-    r'#ifdef CONFIG_KSU_SUSFS\nextern struct static_key_true ksu_su_compat_enabled;.*?#endif\n\n',
-    '', txt, count=1, flags=re.DOTALL)
-txt = re.sub(
-    r'#ifdef CONFIG_KSU_SUSFS\n\s*bool is_su_session = false;\n#endif[^\n]*\n',
-    '', txt, count=1, flags=re.DOTALL)
-txt = re.sub(
-    r'#ifdef CONFIG_KSU_SUSFS\n\s*if [(]likely[(]susfs_is_current_proc_no_su.*?#endif\n',
-    '', txt, count=1, flags=re.DOTALL)
-txt = re.sub(
-    r'#ifdef CONFIG_KSU_SUSFS\n\s*if [(]unlikely[(]is_su_session.*?#endif[^\n]*\n',
-    '', txt, count=1, flags=re.DOTALL)
-
-open(path, 'w').write(txt)
-print("[OK] exec.c: stripped exec.c SUSFS hooks")
-PYEOF
-}
-
-# Checkout an exact tag/ref in the given dir if a pin override was supplied.
-# Hard-fails (not falls back) — this path is only used by the verify gate,
-# so a bad pin should surface loudly rather than silently building HEAD.
-_checkout_pin() {
-  local DIR="$1" PIN="$2" LABEL="$3"
-  [ -z "$PIN" ] && return 0
-  echo "[PIN] ${LABEL}: checking out ${PIN} (override)"
-  git -C "$DIR" checkout -q "$PIN" || {
-    echo "[ERROR] ${LABEL}: failed to checkout pinned ref '${PIN}'"; exit 1;
-  }
-}
-
-if [ "$KSU_TYPE" = "ksun" ]; then
-  rm -rf ./KernelSU ./drivers/kernelsu ./KernelSU-Next
-  curl -LSs "https://raw.githubusercontent.com/pershoot/KernelSU-Next/dev-susfs/kernel/setup.sh" \
-    | bash -s dev-susfs
-  [ -d "KernelSU-Next" ] || { echo "[ERROR] KernelSU-Next not found"; exit 1; }
-
-  cd KernelSU-Next
-  git fetch --tags 2>/dev/null || true
-  _checkout_pin "." "${KSUN_TAG_PIN:-}" "KSU-Next"
-  KSUN_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unknown")
-  KSUN_SHA=$(git rev-parse HEAD)
-  echo "KSUN_TAG=$KSUN_TAG"    >> "${GITHUB_ENV:-/dev/null}"
-  echo "KSUN_SHA=$KSUN_SHA"    >> "${GITHUB_ENV:-/dev/null}"
-  echo "$KSUN_TAG"                  > "$WORK_DIR/ksun_tag.txt"
-  echo "$KSUN_SHA"                  > "$WORK_DIR/ksun_sha.txt"
-  _ksun_ver=$(grep -rh "^#define KSU_VERSION\b" kernel/ 2>/dev/null \
-  | awk 'NR==1{print $NF}' | tr -d '[:space:]')
-  echo "${_ksun_ver:-}" > "$WORK_DIR/ksun_version.txt"
-  cd ..
-
-  # SUSFS — simonpunk main branch (compatible with KSU-Next)
-  git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
-  SUSFS_COMMIT=$(git -C susfs4ksu rev-parse --short HEAD 2>/dev/null || echo "unknown")
-  echo "SUSFS_COMMIT=$SUSFS_COMMIT" >> "${GITHUB_ENV:-/dev/null}"
-  echo "[OK] SUSFS commit: $SUSFS_COMMIT"
-
-  SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
-  [ -f "$SUSFS_PATCH" ] && patch -p1 --forward --batch --fuzz=3 < "$SUSFS_PATCH" || true
-  _patch_namespace_gki_hunk1
-  mkdir -p fs include/linux
-  cp -f susfs4ksu/kernel_patches/fs/*            fs/
-  cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
-  _patch_susfs_def_h
-  _fix_susfs_log_rl_stubs || exit 1
-  _fix_susfs_fake_state
-
-  _inject_susfs_init "KernelSU-Next/kernel/ksu.c"
-  _link_ksu_driver "KernelSU-Next"
-  rm -rf susfs4ksu
-
-
-elif [ "$KSU_TYPE" = "sksu" ]; then
-  rm -rf ./KernelSU ./drivers/kernelsu ./SukiSU-Nova
-
-  git clone --depth=1 --branch "${SKSU_TAG_PIN:-builtin}" \
-    https://github.com/SukiSU-Nova/SukiSU-Nova.git
-  [ -d "SukiSU-Nova" ] || { echo "[ERROR] SukiSU-Nova not found"; exit 1; }
-
-  cd SukiSU-Nova
-  git fetch --tags 2>/dev/null || true
-  SKSU_TAG=$(git describe --tags --exact-match HEAD 2>/dev/null | tr -d '[:space:]')
-  SKSU_TAG=${SKSU_TAG:-$(git describe --tags --abbrev=0 HEAD 2>/dev/null | tr -d '[:space:]')}
-  _sksu_short=$(git rev-parse --short=8 HEAD 2>/dev/null || echo "")
-  if [ -z "$SKSU_TAG" ] || [ "$SKSU_TAG" = "unknown" ]; then
-    _latest_tag=$(git tag -l "v*" --sort=-v:refname 2>/dev/null | head -1 | tr -d '[:space:]')
-    SKSU_TAG="${_latest_tag:-v4.3.0-r2}-${_sksu_short}@builtin"
-  fi
-  SKSU_SHA=$(git rev-parse HEAD)
-  echo "SKSU_TAG=$SKSU_TAG"  >> "${GITHUB_ENV:-/dev/null}"
-  echo "SKSU_SHA=$SKSU_SHA"  >> "${GITHUB_ENV:-/dev/null}"
-  echo "$SKSU_TAG"                > "$WORK_DIR/sksu_tag.txt"
-  echo "$SKSU_SHA"                > "$WORK_DIR/sksu_sha.txt"
-  _sksu_ver=$(grep -rh "^#define KSU_VERSION\b" kernel/ 2>/dev/null \
-    | awk 'NR==1{print $NF}' | tr -d '[:space:]')
-  if [ -z "$_sksu_ver" ]; then
-    _count=$(git rev-list --count HEAD 2>/dev/null || echo "")
-    if [ -n "$_count" ]; then
-      _sksu_ver=$((40000 + _count - 2815))
-    fi
-  fi
-  echo "${_sksu_ver:-41179}" > "$WORK_DIR/sksu_version.txt"
-  cd ..
-
-  # Apply SUSFS to kernel tree; SukiSU builtin branch has native SUSFS support
-  git clone --depth=1 -b gki-android13-5.15 https://gitlab.com/simonpunk/susfs4ksu.git
-
-  SUSFS_COMMIT=$(git -C susfs4ksu rev-parse --short HEAD 2>/dev/null || echo "unknown")
-  echo "SUSFS_COMMIT=$SUSFS_COMMIT" >> "${GITHUB_ENV:-/dev/null}"
-  echo "[OK] SUSFS commit: $SUSFS_COMMIT"
-
-  SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
-  [ -f "$SUSFS_PATCH" ] && patch -p1 --forward --batch --fuzz=3 < "$SUSFS_PATCH" || true
-  _patch_namespace_gki_hunk1
-  mkdir -p fs include/linux
-  cp -f susfs4ksu/kernel_patches/fs/*            fs/
-  cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
-  _patch_susfs_def_h
-  _fix_susfs_log_rl_stubs || exit 1
-
-  _link_ksu_driver "SukiSU-Nova/kernel"
-  rm -rf susfs4ksu
-
+# Apply the integration patch. The upstream patch may have a GKI context
+# difference in fs/namespace.c; that one hunk is handled explicitly below.
+if ! patch -p1 --forward --batch --fuzz=3 < "$SUSFS_PATCH"; then
+  echo "[WARN] SUSFS integration patch had rejected hunks; checking required files"
 fi
 
-echo "[OK] KSU setup complete: $KSU_TYPE"
+# GKI namespace hunk compatibility: ensure the SUSFS include and declarations
+# exist even when the upstream patch's context has shifted.
+python3 - <<'PY'
+from pathlib import Path
+p = Path("fs/namespace.c")
+if not p.exists():
+    raise SystemExit("[ERROR] fs/namespace.c is missing")
+s = p.read_text()
+
+if "#include <linux/susfs_def.h>" not in s:
+    anchors = ["#include <linux/mnt_idmapping.h>", "#include <linux/mount.h>"]
+    for anchor in anchors:
+        if anchor in s:
+            s = s.replace(anchor, anchor + "\n\n#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT\n#include <linux/susfs_def.h>\n#endif", 1)
+            break
+    else:
+        raise SystemExit("[ERROR] namespace.c include anchor not found")
+
+marker = '#include "internal.h"'
+if marker not in s:
+    raise SystemExit('[ERROR] namespace.c internal.h anchor not found')
+block = """#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+extern bool susfs_is_current_ksu_domain(void);
+extern struct static_key_true susfs_is_sdcard_android_data_not_decrypted;
+#ifndef CL_COPY_MNT_NS
+#define CL_COPY_MNT_NS BIT(25)
+#endif
+#endif"""
+if "susfs_is_current_ksu_domain" not in s:
+    s = s.replace(marker, marker + "\n\n" + block, 1)
+
+p.write_text(s)
+print("[OK] namespace.c SUSFS GKI compatibility declarations verified")
+PY
+
+mkdir -p fs include/linux
+cp -f susfs4ksu/kernel_patches/fs/* fs/
+cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
+
+# SUSFS header may use current_uid() without including cred.h.
+if [ -f include/linux/susfs_def.h ] && ! grep -q 'linux/cred.h' include/linux/susfs_def.h; then
+  sed -i '1i#include <linux/cred.h>' include/linux/susfs_def.h
+  echo "[OK] Added linux/cred.h to susfs_def.h"
+fi
+
+# Some SUSFS revisions leave rate-limited logging macros undefined when
+# CONFIG_KSU_SUSFS_ENABLE_LOG is disabled.
+if [ -f fs/susfs.c ] && ! grep -qE '^#define SUSFS_LOGI_RL\(fmt, \.\.\.\)' fs/susfs.c; then
+  if grep -qF '#define SUSFS_LOGE(fmt, ...) ' fs/susfs.c; then
+    sed -i '/^#define SUSFS_LOGE(fmt, \.\.\.) $/a #define SUSFS_LOGI_RL(fmt, ...) \n#define SUSFS_LOGE_RL(fmt, ...) ' fs/susfs.c
+    echo "[OK] Added SUSFS_LOG*_RL fallback macros"
+  fi
+fi
+
+# Critical Linux 5.15 API compatibility fix for the build failure observed
+# in fs/susfs.c: fsnotify_alloc_group() takes one argument on this kernel.
+bash "$WORK_DIR/scripts/fix-susfs-515.sh" fs/susfs.c
+
+# Link SukiSU-Nova into the kernel build.
+[ -e drivers/kernelsu ] || ln -s ../SukiSU-Nova/kernel drivers/kernelsu
+grep -q 'obj-.*kernelsu' drivers/Makefile || \
+  echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
+grep -q 'kernelsu/Kconfig' drivers/Kconfig || \
+  echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
+
+rm -rf susfs4ksu
+echo "[OK] SukiSU-Nova + SUSFS 5.15 + KPM source integration complete"
