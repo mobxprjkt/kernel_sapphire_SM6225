@@ -64,12 +64,31 @@ make "${MAKE_FLAGS[@]}" "$DEFCONFIG"
 make "${MAKE_FLAGS[@]}" olddefconfig
 
 echo "[CHECK] Required feature config"
-for symbol in CONFIG_KSU CONFIG_KPM CONFIG_KSU_SUSFS; do
+for symbol in CONFIG_KSU CONFIG_KPM CONFIG_KALLSYMS CONFIG_KALLSYMS_ALL CONFIG_KSU_SUSFS; do
   grep -qx "$symbol=y" "$OUT_DIR/dist/.config" || {
     echo "[ERROR] $symbol is not enabled after olddefconfig" >&2
     exit 1
   }
 done
+
+# SukiSU-Nova builtin branch compiles KPM implementation through ksu_main.c
+# when KSU_CAN_USE_KPM is enabled. Fail if the implementation is absent.
+KSU_DIR="$KERNEL_SRC/drivers/kernelsu"
+for source in \
+  "$KSU_DIR/extension/kpm.c" \
+  "$KSU_DIR/extension/kpm/kpm.c" \
+  "$KSU_DIR/extension/kpm.h"; do
+  [ -s "$source" ] || {
+    echo "[ERROR] Required SukiSU KPM source missing: $source" >&2
+    exit 1
+  }
+done
+printf '%s\n' \
+  'CONFIG_KSU=y' 'CONFIG_KPM=y' 'CONFIG_KALLSYMS=y' \
+  'CONFIG_KALLSYMS_ALL=y' 'CONFIG_KSU_SUSFS=y' \
+  "SukiSU-Nova SHA: ${SKSU_SHA:-unknown}" \
+  > "$WORK_DIR/kpm-build-proof.txt"
+echo "[OK] KPM config and implementation sources verified"
 
 echo "[BUILD] Image only — no unrelated optional modules"
 LOG="${WORK_DIR}/build.log"

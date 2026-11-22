@@ -14,30 +14,41 @@ cp "$IMAGE" ak3_tmp/Image
 # Device-specific AnyKernel3 metadata for Xiaomi Redmi Note 13 4G (Sapphire).
 cat > ak3_tmp/anykernel.sh <<'AK3'
 ### AnyKernel3 Ramdisk Mod Script
-## Sapphire — SukiSU-Nova + SUSFS + KPM
+## Sapphire / Sapphiren — SukiSU-Nova + SUSFS + KPM
 properties() { '
 kernel.string=Sapphire SukiSU-Nova + SUSFS + KPM
 do.devicecheck=1
 do.modules=0
-do.systemless=1
+do.systemless=0
 do.cleanup=1
 do.cleanuponabort=0
-device.name1=sapphire
-device.name2=sapphiren
+device.name1=sapphiren
+device.name2=sapphire
 supported.versions=13-17
-'; }
+supported.patchlevels=
+supported.vendorpatchlevels=
+'; } # end properties
 
-# Boot partition on A/B devices; AnyKernel3 resolves the active slot.
-BLOCK=boot;
-IS_SLOT_DEVICE=1;
-RAMDISK_COMPRESSION=auto;
-PATCH_VBMETA_FLAG=auto;
+### AnyKernel install
+## boot shell variables
+block=boot
+is_slot_device=auto
+ramdisk_compression=auto
+patch_vbmeta_flag=auto
+no_magisk_check=1
 
-. tools/ak3-core.sh;
+# import functions/variables and setup patching - see for reference (DO NOT REMOVE)
+. tools/ak3-core.sh
 
-# Replace the boot image kernel while preserving the existing ramdisk.
-dump_boot;
-write_boot;
+# boot install
+if [ -L "/dev/block/bootdevice/by-name/init_boot_a" -o -L "/dev/block/by-name/init_boot_a" ]; then
+    split_boot # for devices with init_boot ramdisk
+    flash_boot # for devices with init_boot ramdisk
+else
+    dump_boot # use split_boot to skip ramdisk unpack, e.g. for devices with init_boot ramdisk
+    write_boot # use flash_boot to skip ramdisk repack, e.g. for devices with init_boot ramdisk
+fi
+## end boot install
 AK3
 
 VERSION_FILE="${WORK_DIR}/out/dist/kernel_version.txt"

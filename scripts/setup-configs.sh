@@ -8,6 +8,8 @@ set -euo pipefail
 sed -i \
   -e '/^CONFIG_KSU=/d' \
   -e '/^CONFIG_KPM=/d' \
+  -e '/^CONFIG_KALLSYMS=/d' \
+  -e '/^CONFIG_KALLSYMS_ALL=/d' \
   -e '/^CONFIG_KSU_SUSFS/d' \
   -e '/^CONFIG_NTSYNC=/d' \
   -e '/^# CONFIG_NTSYNC /d' \
@@ -20,6 +22,8 @@ cat >> "$DEFCONFIG" <<'EOF'
 # CONFIG_NTSYNC is not set
 CONFIG_KSU=y
 CONFIG_KPM=y
+CONFIG_KALLSYMS=y
+CONFIG_KALLSYMS_ALL=y
 CONFIG_KSU_SUSFS=y
 CONFIG_KSU_SUSFS_SUS_MAP=y
 CONFIG_KSU_SUSFS_SUS_PATH=y
@@ -38,4 +42,8 @@ CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
 CONFIG_KSU_SUSFS_SUS_SU=y
 EOF
 
-echo "[OK] Enabled only SukiSU-Nova + SUSFS + KPM"
+echo "[CHECK] KPM config requested"
+grep -qx 'CONFIG_KPM=y' "$DEFCONFIG"
+grep -qx 'CONFIG_KALLSYMS=y' "$DEFCONFIG"
+grep -qx 'CONFIG_KALLSYMS_ALL=y' "$DEFCONFIG"
+echo "[OK] Enabled SukiSU-Nova + SUSFS + KPM + required kallsyms"

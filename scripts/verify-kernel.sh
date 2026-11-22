@@ -5,7 +5,20 @@ set -e
 : "${WORK_DIR:?}"
 
 IMAGE="${WORK_DIR}/out/dist/Image"
-[ -f "$IMAGE" ] || { echo "[ERROR] Image not found: $IMAGE"; exit 1; }
+CONFIG="${WORK_DIR}/out/dist/.config"
+[ -s "$IMAGE" ] || { echo "[ERROR] Image not found: $IMAGE"; exit 1; }
+[ -s "$CONFIG" ] || { echo "[ERROR] Final kernel .config not found"; exit 1; }
+for symbol in CONFIG_KPM CONFIG_KALLSYMS CONFIG_KALLSYMS_ALL CONFIG_KSU CONFIG_KSU_SUSFS; do
+  grep -qx "$symbol=y" "$CONFIG" || {
+    echo "[ERROR] Final image config missing $symbol=y" >&2
+    exit 1
+  }
+done
+[ -s "${WORK_DIR}/kpm-build-proof.txt" ] || {
+  echo "[ERROR] KPM build proof missing" >&2
+  exit 1
+}
+echo "[OK] KPM + kallsyms final config verified"
 
 VERSION_FULL=$(strings "$IMAGE" | grep "Linux version [0-9]" | head -1)
 echo "$VERSION_FULL"
