@@ -1,4 +1,4 @@
-name: Sapphire Kernel Build — SukiSU-Nova + SUSFS + KPM
+name: Sapphire GKI 5.15 Kernel Build
 
 on:
   workflow_dispatch:
@@ -102,15 +102,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Sapphire-SukiSU-Nova-SUSFS-KPM
-          path: |
-            AK3-Sapphire-SukiSU-Nova-SUSFS-KPM-*.zip
-            out/dist/Image
-            out/dist/kernel_version.txt
-            sksu_tag.txt
-            sksu_sha.txt
-            kpm-build-proof.txt
-            kpm-image-proof.txt
-            avc-spoof-build-proof.txt
+          name: Sapphire-GKI-5.15-Flashable
+          path: Sapphire-GKI-5.15-SukiSU-Nova-*-flashable.zip
           if-no-files-found: error
           retention-days: 14
