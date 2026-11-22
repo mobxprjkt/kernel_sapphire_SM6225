@@ -12,6 +12,13 @@ set -e
 source /tmp/apply_patch.sh
 cd "$KERNEL_SRC"
 
+# Safety guard: never apply a 6.12 release spoof to this Linux 5.15 kernel.
+PATCHES_DIR="$WORK_DIR/patches"
+if [ -f "$PATCHES_DIR/common/kernel-release-spoof-6.12-5.15.patch" ]; then
+  echo "[ERROR] Obsolete 6.12 release-spoof patch detected; refusing to apply patches." >&2
+  exit 1
+fi
+
 # gki-legacy: WildKernels + KSU only — skip common/testing
 [ "$SOURCE_TYPE" = "gki-legacy" ] && echo "[GKI-LEGACY] Skipping common/testing patches — WildKernels block follows"
 
@@ -101,7 +108,6 @@ if [ "$BUILD_TYPE" = "testing" ] && [ "$SOURCE_TYPE" != "gki-legacy" ]; then
   fi
 fi
 
-# Verify that the source tree is the expected Linux 5.15 base.
 KERNEL_VERSION_LINE=$(awk -F= '/^VERSION[[:space:]]*=/ {gsub(/[[:space:]]/, "", $2); print $2; exit}' Makefile)
 KERNEL_PATCHLEVEL_LINE=$(awk -F= '/^PATCHLEVEL[[:space:]]*=/ {gsub(/[[:space:]]/, "", $2); print $2; exit}' Makefile)
 if [ "$KERNEL_VERSION_LINE" != "5" ] || [ "$KERNEL_PATCHLEVEL_LINE" != "15" ]; then
