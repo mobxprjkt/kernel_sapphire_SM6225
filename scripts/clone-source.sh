@@ -3,7 +3,7 @@ set -euo pipefail
 : "${WORK_DIR:=${GITHUB_WORKSPACE:?}}"
 : "${KERNEL_SRC:=${WORK_DIR}/kernel_src}"
 GKI_REPO="https://github.com/The-Angel-Place-Sapphire/kernel_xiaomi_sapphire.git"
-GKI_BRANCH="lineage-23.2"
+GKI_BRANCH="lineage-23.2-caf"
 
 rm -rf "$KERNEL_SRC"
 mkdir -p "$(dirname "$KERNEL_SRC")"
