@@ -1,10 +1,11 @@
+
 name: Sapphire GKI 5.15 Kernel Build
 
 on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   WORK_DIR: ${{ github.workspace }}
@@ -94,15 +95,43 @@ jobs:
       - name: Package AnyKernel3 ZIP
         run: bash scripts/pack-zip.sh
 
+      - name: Verify Flashable ZIP
+        run: |
+          shopt -s nullglob
+          FILES=(Sapphire-GKI-5.15-SukiSU-Nova-*-flashable.zip)
+
+          if [ ${#FILES[@]} -eq 0 ]; then
+            echo "ERROR: Flashable ZIP not found!"
+            exit 1
+          fi
+
+          for file in "${FILES[@]}"; do
+            unzip -t "$file"
+            echo "Verified: $file"
+          done
+
       - name: Print ccache statistics
         if: always()
         run: ccache --show-stats || true
 
-      - name: Upload Image and AnyKernel3 ZIP
+      - name: Upload Flashable ZIP to GitHub Release
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: softprops/action-gh-release@v2
         with:
-          name: Sapphire-GKI-5.15-Flashable
-          path: Sapphire-GKI-5.15-SukiSU-Nova-*-flashable.zip
-          if-no-files-found: error
-          retention-days: 14
+          tag_name: Sapphire-GKI-5.15-${{ github.run_number }}
+          name: Sapphire GKI 5.15 - Build ${{ github.run_number }}
+          body: |
+            ## Sapphire GKI 5.15
+
+            - Kernel: Linux 5.15
+            - Root: SukiSU-Nova
+            - SUSFS: Integrated
+            - KPM: Enabled by build configuration
+            - Device: Sapphire / Sapphire N
+
+            Build Number: ${{ github.run_number }}
+            Commit: ${{ github.sha }}
+          files: |
+            Sapphire-GKI-5.15-SukiSU-Nova-*-flashable.zip
+          fail_on_unmatched_files: true
+          overwrite_files: true
