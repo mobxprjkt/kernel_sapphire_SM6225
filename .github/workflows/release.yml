@@ -52,12 +52,9 @@ jobs:
           GITHUB_TOKEN:              ${{ secrets.GITHUB_TOKEN }}
           KSUN_MANAGER_ARTIFACT_ID:          ${{ env.KSUN_MANAGER_ARTIFACT_ID }}
           KSUN_MANAGER_SPOOFED_ARTIFACT_ID:  ${{ env.KSUN_MANAGER_SPOOFED_ARTIFACT_ID }}
-          RSKU_MANAGER_ARTIFACT_ID:          ${{ env.RSKU_MANAGER_ARTIFACT_ID }}
-          RSKU_MANAGER_SPOOFED_ARTIFACT_ID:  ${{ env.RSKU_MANAGER_SPOOFED_ARTIFACT_ID }}
           SKSU_MANAGER_ARTIFACT_ID:          ${{ env.SKSU_MANAGER_ARTIFACT_ID }}
           SKSU_MANAGER_SPOOFED_ARTIFACT_ID:  ${{ env.SKSU_MANAGER_SPOOFED_ARTIFACT_ID }}
           KSUN_VERSION:                      ${{ env.KSUN_VERSION }}
-          RSKU_VERSION:                      ${{ env.RSKU_VERSION }}
         run: bash scripts/fetch-manager-apks.sh
 
 

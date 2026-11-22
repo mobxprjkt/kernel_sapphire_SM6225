@@ -75,16 +75,6 @@ jobs:
           SOURCE_TYPE: ${{ inputs.source_type }}
         run: bash scripts/setup-toolchain.sh
 
-      - name: "Apply patches"
-        env:
-          SOURCE_TYPE: ${{ inputs.source_type }}
-          KSU_TYPE:    ${{ inputs.ksu_type }}
-          BUILD_TYPE:  ${{ inputs.build_type }}
-          DEFCONFIG:   ${{ inputs.defconfig }}
-        run: |
-          set -o pipefail
-          bash scripts/apply-patches.sh
-
       - name: "Setup NoMount"
         working-directory: ${{ env.KERNEL_SRC }}
         run: |
