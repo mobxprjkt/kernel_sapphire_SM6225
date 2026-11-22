@@ -5,13 +5,13 @@
 ### AnyKernel setup
 properties() { '
 kernel.string=SukiSU Nova Kernel
-do.devicecheck=0
+do.devicecheck=1
 do.modules=0
-do.systemless=1
+do.systemless=0
 do.cleanup=1
 do.cleanuponabort=0
-device.name1=sapphire
-device.name2=sapphiren
+device.name1=sapphiren
+device.name2=sapphire
 supported.versions=13-17
 supported.patchlevels=
 supported.vendorpatchlevels=

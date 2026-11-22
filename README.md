@@ -84,3 +84,12 @@ The pinned KernelPatch ARM64 `kpimg` Makefile is patched at build time to add
 emitting unresolved `__stack_chk_guard` and `__stack_chk_fail` references in
 the freestanding kpimg payload. This does not change the kernel's own stack
 protector configuration or the supplied AnyKernel3 installer.
+
+
+## v8 — ARM64 kpimg stack-protector fix (researched against branch `bk`)
+
+The `bk` branch integrates SukiSU-Nova from its `builtin` branch and enables `CONFIG_KPM=y`; its SukiSU bridge uses ABI v2 and resolves `__arm64_sys_truncate`. The matching KernelPatch payload is still built separately and injected into the final Image.
+
+The previous v7 patch had a detection bug: upstream `kernel/Makefile` already contained `-fno-stack-protector` in `X86_CFLAGS`, so a generic substring check incorrectly concluded the ARM64 compiler flags were fixed. v8 checks and inserts the exact `CFLAGS += -fno-stack-protector` assignment in the ARM64 CFLAGS section, then scans all ARM64 object files for unresolved `__stack_chk_guard` / `__stack_chk_fail` before accepting `kpimg`.
+
+This is a source-level build fix, not a claim that a full GitHub Actions build or device boot has already passed.

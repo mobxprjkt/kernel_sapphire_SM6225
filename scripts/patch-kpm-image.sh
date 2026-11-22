@@ -56,24 +56,46 @@ case "$MODE" in
     done
     grep -q 'SUKISU_KPM_ABI_VERSION 2' "$SUKISU_KPM_BRIDGE_HEADER" || die "SukiSU-Nova bridge ABI is not v2"
 
-    echo "[KPM] Preparing freestanding kpimg compiler flags"
+    echo "[KPM] Preparing ARM64 freestanding kpimg compiler flags"
     KP_MAKEFILE="$STAGE/kernelpatch/kernel/Makefile"
     [[ -s "$KP_MAKEFILE" ]] || die "KernelPatch kernel Makefile is missing"
-    python3 - "$KP_MAKEFILE" <<'PY'
+    python3 - "$KP_MAKEFILE" <<'PYMAKE'
 import pathlib, sys
 p = pathlib.Path(sys.argv[1])
 s = p.read_text()
-marker = "CFLAGS += -DANDROID"
-if marker not in s:
-    raise SystemExit("[KPM ERROR] Cannot locate ARM64 CFLAGS anchor in KernelPatch Makefile")
-addition = marker + "\n# kpimg is a freestanding payload: host distro stack-protector defaults\n# emit __stack_chk_guard/__stack_chk_fail references with no runtime provider.\nCFLAGS += -fno-stack-protector"
-if "-fno-stack-protector" not in s:
-    s = s.replace(marker, addition, 1)
+anchor = "CFLAGS += -DANDROID"
+lines = s.splitlines()
+if lines.count(anchor) != 1:
+    raise SystemExit(f"[KPM ERROR] Expected exactly one exact ARM64 CFLAGS line, found {lines.count(anchor)}")
+# Do not test for the generic substring '-fno-stack-protector': the upstream
+# Makefile already has it in X86_CFLAGS, which caused the previous fix to
+# silently skip ARM64. Require the exact ARM64 CFLAGS assignment instead.
+arm_flag = "CFLAGS += -fno-stack-protector"
+if arm_flag not in lines:
+    index = lines.index(anchor)
+    lines.insert(index + 1, arm_flag)
+    s = "\n".join(lines) + "\n"
 p.write_text(s)
-PY
-    grep -q -- '-fno-stack-protector' "$KP_MAKEFILE" || die "Failed to disable stack protector for freestanding kpimg"
+# Assert the ARM64 assignment occurs after its own CFLAGS anchor, not merely
+# somewhere in the file (X86_CFLAGS is a separate compiler path).
+arm_section = s.split(anchor, 1)[1]
+if arm_flag not in arm_section.split("X86_CFLAGS", 1)[0]:
+    raise SystemExit("[KPM ERROR] ARM64 -fno-stack-protector flag is not in the ARM64 CFLAGS section")
+PYMAKE
+    grep -Fq 'CFLAGS += -fno-stack-protector' "$KP_MAKEFILE" || die "ARM64 stack protector flag was not inserted"
+    echo "[KPM] Verified ARM64 CFLAGS contains -fno-stack-protector (X86_CFLAGS check is not accepted)"
     echo "[KPM] Building kpimg for ARM64 (stack protector disabled for freestanding payload)"
     make -C "$STAGE/kernelpatch/kernel" TARGET_COMPILE=aarch64-linux-gnu- -j"$(nproc)"
+    # A freestanding kpimg must not retain compiler-generated stack-check
+    # runtime calls. Inspect every ARM64 object before allowing the final link.
+    OBJECT_SYMBOLS="$STAGE/kernelpatch/kernel/arm64-object-undefined-symbols.txt"
+    find "$STAGE/kernelpatch/kernel" -type f -name '*.o' -print0 \
+      | xargs -0 -r aarch64-linux-gnu-nm -u > "$OBJECT_SYMBOLS" || true
+    if grep -E '__stack_chk_(guard|fail)' "$OBJECT_SYMBOLS" > "$STAGE/kernelpatch/kernel/stack-protector-refs.txt"; then
+      cat "$STAGE/kernelpatch/kernel/stack-protector-refs.txt" >&2
+      die "ARM64 kpimg objects still reference stack protector runtime; refusing to link/package"
+    fi
+    echo "[KPM OK] No __stack_chk_guard/__stack_chk_fail references in ARM64 kpimg objects"
     KPIMG="$STAGE/kernelpatch/kernel/kpimg"
     [[ -s "$KPIMG" ]] || die "Matching ARM64 kpimg was not produced"
 
