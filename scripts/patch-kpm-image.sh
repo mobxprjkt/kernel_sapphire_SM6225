@@ -1,30 +1,32 @@
 #!/usr/bin/env bash
-# Inject KernelPatch kpimg into the built Sapphire Image.
-# CONFIG_KPM=y alone only enables SukiSU-Nova's bridge; kpimg supplies runtime.
+# Build both kpimg and kptools from the same pinned SukiSU-Nova KernelPatch source.
+# This keeps KernelPatch's ARM64 supercall ABI aligned with SukiSU-Nova bridge ABI v2.
 set -euo pipefail
 
 MODE="${1:-}"
 IMAGE="${2:-}"
 PROOF="${3:-}"
+WORK_DIR="${WORK_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
+SUKISU_KPM_BRIDGE_HEADER="${SUKISU_KPM_BRIDGE_HEADER:-${KERNEL_SRC:-}/drivers/kernelsu/extension/kpm/bridge.h}"
 
-KPM_PATCH_VERSION="0.13.9"
-KPM_TOOLS_SHA256="6b5122046848865b1f68c04a45e34bbed81c9b535a42646a3ea423ce38a93aeb"
-KPM_PAYLOAD_SHA256="396a20777668e85d674a23dd3945815f285332b5358be0bfc97297935e2d130b"
-KPM_BASE_URL="https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch/releases/download/${KPM_PATCH_VERSION}"
+KP_REPO="https://github.com/SukiSU-Nova/SukiSU_KernelPatch_patch.git"
+KP_REF="main"
+KP_COMMIT="1c5b608916357ac86a94cc736e235db1fac4a29d"
 
-die() { echo "[KPM ERROR] $*" >&2; exit 1; }
+ die() { echo "[KPM ERROR] $*" >&2; exit 1; }
 
 verify_image() {
   local image="$1" proof="$2" image_sha
   [[ -s "$image" ]] || die "Image missing or empty: $image"
-  [[ -s "$proof" ]] || die "KPM runtime proof missing: $proof"
+  [[ -s "$proof" ]] || die "KPM proof missing: $proof"
   image_sha="$(sha256sum "$image" | awk '{print $1}')"
-  grep -Fxq "patched=true" "$proof" || die "KernelPatch inspector did not confirm patched=true"
-  grep -Fxq "patch_version=${KPM_PATCH_VERSION}" "$proof" || die "KernelPatch version mismatch"
-  grep -Fxq "tools_sha256=${KPM_TOOLS_SHA256}" "$proof" || die "kptools checksum proof mismatch"
-  grep -Fxq "payload_sha256=${KPM_PAYLOAD_SHA256}" "$proof" || die "kpimg checksum proof mismatch"
+  grep -Fxq 'patched=true' "$proof" || die "KernelPatch inspector did not confirm patched=true"
+  grep -Fxq "kp_repo=${KP_REPO}" "$proof" || die "Unexpected KernelPatch repository"
+  grep -Fxq "kp_ref=${KP_REF}" "$proof" || die "KernelPatch ref mismatch"
+  grep -Fxq "kp_commit=${KP_COMMIT}" "$proof" || die "KernelPatch source commit mismatch"
+  grep -Fxq 'supercall_abi=2' "$proof" || die "KernelPatch supercall ABI proof missing"
   grep -Fxq "image_sha256=${image_sha}" "$proof" || die "Proof does not match this Image"
-  echo "[KPM OK] KernelPatch ${KPM_PATCH_VERSION} runtime is embedded and verified"
+  echo "[KPM OK] SukiSU-Nova ABI-v2 KernelPatch payload is embedded and verified"
   echo "[KPM OK] Image SHA-256: ${image_sha}"
 }
 
@@ -32,53 +34,71 @@ case "$MODE" in
   patch)
     [[ -n "$IMAGE" && -n "$PROOF" ]] || die "Usage: $0 patch <Image> <proof-file>"
     [[ -s "$IMAGE" ]] || die "Input Image missing or empty: $IMAGE"
+    command -v cmake >/dev/null || die "cmake is required to build matching kptools"
+    command -v aarch64-linux-gnu-gcc >/dev/null || die "aarch64-linux-gnu-gcc is required to build matching kpimg"
     IMAGE="$(realpath "$IMAGE")"
     PROOF="$(realpath -m "$PROOF")"
-    STAGE="$(mktemp -d "$(dirname "$IMAGE")/.kpm-inject.XXXXXX")"
+    STAGE="$(mktemp -d "${WORK_DIR}/.kpm-build.XXXXXX")"
     trap 'rm -rf "$STAGE"' EXIT
 
-    echo "[KPM] Downloading pinned KernelPatch ${KPM_PATCH_VERSION}"
-    for asset in kptools-linux kpimg; do
-      curl --retry 5 --retry-delay 3 --retry-all-errors -fLSs \
-        "${KPM_BASE_URL}/${asset}" -o "${STAGE}/${asset}" ||
-        die "Failed to download ${asset}"
-    done
+    echo "[KPM] Cloning pinned SukiSU-Nova KernelPatch source"
+    git clone --quiet --depth=1 --recursive "$KP_REPO" "$STAGE/kernelpatch"
+    actual_commit="$(git -C "$STAGE/kernelpatch" rev-parse HEAD)"
+    [[ "$actual_commit" == "$KP_COMMIT" ]] || die "KernelPatch commit changed: expected ${KP_COMMIT}, got ${actual_commit}"
 
-    tools_sha="$(sha256sum "$STAGE/kptools-linux" | awk '{print $1}')"
-    payload_sha="$(sha256sum "$STAGE/kpimg" | awk '{print $1}')"
-    [[ "$tools_sha" == "$KPM_TOOLS_SHA256" ]] || die "kptools-linux SHA-256 mismatch: ${tools_sha}"
-    [[ "$payload_sha" == "$KPM_PAYLOAD_SHA256" ]] || die "kpimg SHA-256 mismatch: ${payload_sha}"
-    chmod 755 "$STAGE/kptools-linux"
+    BRIDGE="$STAGE/kernelpatch/kernel/patch/sukisu/supercall.h"
+    [[ -s "$BRIDGE" ]] || die "KernelPatch SukiSU supercall implementation is missing"
+    grep -q 'SUKISU_KPM_ABI_VERSION 2' "$BRIDGE" || die "KernelPatch supercall ABI is not v2"
+    for magic in 0x53554b504d000002UL 0x4b504d4252494447UL 0x53554b494e544552UL; do
+      grep -q "$magic" "$BRIDGE" || die "KernelPatch ABI magic mismatch: $magic"
+      [[ -s "$SUKISU_KPM_BRIDGE_HEADER" ]] || die "SukiSU-Nova bridge header missing: $SUKISU_KPM_BRIDGE_HEADER"
+      grep -q "$magic" "$SUKISU_KPM_BRIDGE_HEADER" || die "SukiSU-Nova / KernelPatch ABI magic mismatch: $magic"
+    done
+    grep -q 'SUKISU_KPM_ABI_VERSION 2' "$SUKISU_KPM_BRIDGE_HEADER" || die "SukiSU-Nova bridge ABI is not v2"
+
+    echo "[KPM] Building kpimg for ARM64"
+    make -C "$STAGE/kernelpatch/kernel" TARGET_COMPILE=aarch64-linux-gnu- -j"$(nproc)"
+    KPIMG="$STAGE/kernelpatch/kernel/kpimg"
+    [[ -s "$KPIMG" ]] || die "Matching ARM64 kpimg was not produced"
+
+    echo "[KPM] Building kptools from the same source revision"
+    cmake -S "$STAGE/kernelpatch/tools" -B "$STAGE/tools-build" -DCMAKE_BUILD_TYPE=Release
+    cmake --build "$STAGE/tools-build" --parallel "$(nproc)"
+    KPT="$STAGE/tools-build/kptools"
+    [[ -x "$KPT" ]] || die "Matching kptools binary was not produced"
 
     input_sha="$(sha256sum "$IMAGE" | awk '{print $1}')"
-    echo "[KPM] Injecting kpimg into final Image"
-    "$STAGE/kptools-linux" -p -s 123 -i "$IMAGE" \
-      -k "$STAGE/kpimg" -o "$STAGE/Image" >"$STAGE/patch.log" 2>&1 || {
-        cat "$STAGE/patch.log" >&2
-        die "KernelPatch image injection failed"
-      }
+    echo "[KPM] Injecting ABI-v2 kpimg into final Image"
+    "$KPT" -p -s 123 -i "$IMAGE" -k "$KPIMG" -o "$STAGE/Image" >"$STAGE/patch.log" 2>&1 || {
+      cat "$STAGE/patch.log" >&2
+      die "KernelPatch image injection failed"
+    }
+    [[ -s "$STAGE/Image" ]] || die "kptools produced an empty Image"
+    cmp -s "$IMAGE" "$STAGE/Image" && die "Image unchanged; refusing to claim KPM runtime injection"
 
-    [[ -s "$STAGE/Image" ]] || die "kptools did not produce output Image"
-    cmp -s "$IMAGE" "$STAGE/Image" && die "Image is unchanged; refusing to claim KPM support"
-
-    "$STAGE/kptools-linux" -l -i "$STAGE/Image" >"$STAGE/inspect.txt" 2>&1 ||
+    "$KPT" -l -i "$STAGE/Image" >"$STAGE/inspect.txt" 2>&1 || {
+      cat "$STAGE/inspect.txt" >&2
       die "KernelPatch image inspection failed"
+    }
     cat "$STAGE/inspect.txt"
-    grep -Fxq "patched=true" "$STAGE/inspect.txt" ||
-      die "Image inspector did not report patched=true"
+    grep -Fxq 'patched=true' "$STAGE/inspect.txt" || die "Inspector did not report patched=true"
 
     output_sha="$(sha256sum "$STAGE/Image" | awk '{print $1}')"
+    kpimg_sha="$(sha256sum "$KPIMG" | awk '{print $1}')"
+    tools_sha="$(sha256sum "$KPT" | awk '{print $1}')"
     {
-      echo "patched=true"
-      echo "patch_version=${KPM_PATCH_VERSION}"
-      echo "tools_sha256=${KPM_TOOLS_SHA256}"
-      echo "payload_sha256=${KPM_PAYLOAD_SHA256}"
+      echo 'patched=true'
+      echo "kp_repo=${KP_REPO}"
+      echo "kp_ref=${KP_REF}"
+      echo "kp_commit=${KP_COMMIT}"
+      echo "kpimg_sha256=${kpimg_sha}"
+      echo "kptools_sha256=${tools_sha}"
       echo "input_sha256=${input_sha}"
       echo "image_sha256=${output_sha}"
-      echo "superkey=123"
+      echo 'superkey=123'
+      echo 'supercall_abi=2'
       cat "$STAGE/inspect.txt"
     } > "$STAGE/kpm-image-proof.txt"
-
     mv "$STAGE/Image" "$IMAGE"
     mv "$STAGE/kpm-image-proof.txt" "$PROOF"
     verify_image "$IMAGE" "$PROOF"
@@ -87,7 +107,5 @@ case "$MODE" in
     [[ -n "$IMAGE" && -n "$PROOF" ]] || die "Usage: $0 verify <Image> <proof-file>"
     verify_image "$IMAGE" "$PROOF"
     ;;
-  *)
-    die "Usage: $0 {patch|verify} <Image> <proof-file>"
-    ;;
+  *) die "Usage: $0 {patch|verify} <Image> <proof-file>" ;;
 esac

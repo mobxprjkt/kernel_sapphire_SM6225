@@ -71,18 +71,24 @@ for symbol in CONFIG_KSU CONFIG_KPM CONFIG_KALLSYMS CONFIG_KALLSYMS_ALL CONFIG_K
   }
 done
 
-# SukiSU-Nova builtin branch compiles KPM implementation through ksu_main.c
-# when KSU_CAN_USE_KPM is enabled. Fail if the implementation is absent.
+# Verify the exact KPM bridge ABI used by SukiSU-Nova. CONFIG_KPM alone
+# is not sufficient: the bridge must resolve __arm64_sys_truncate and speak ABI v2.
 KSU_DIR="$KERNEL_SRC/drivers/kernelsu"
 for source in \
   "$KSU_DIR/extension/kpm.c" \
   "$KSU_DIR/extension/kpm/kpm.c" \
-  "$KSU_DIR/extension/kpm.h"; do
+  "$KSU_DIR/extension/kpm/bridge.h"; do
   [ -s "$source" ] || {
-    echo "[ERROR] Required SukiSU KPM source missing: $source" >&2
+    echo "[ERROR] Required SukiSU KPM bridge source missing: $source" >&2
     exit 1
   }
 done
+grep -q 'SUKISU_KPM_ABI_VERSION 2' "$KSU_DIR/extension/kpm/bridge.h" || {
+  echo "[ERROR] SukiSU KPM bridge ABI is not version 2" >&2; exit 1;
+}
+grep -q 'find_kernel_symbol_exact("__arm64_sys_truncate")' "$KSU_DIR/extension/kpm/kpm.c" || {
+  echo "[ERROR] Expected arm64 KernelPatch bridge resolver is missing" >&2; exit 1;
+}
 printf '%s\n' \
   'CONFIG_KSU=y' 'CONFIG_KPM=y' 'CONFIG_KALLSYMS=y' \
   'CONFIG_KALLSYMS_ALL=y' 'CONFIG_KSU_SUSFS=y' \
@@ -114,9 +120,18 @@ IMAGE="$OUT_DIR/dist/arch/arm64/boot/Image"
 [ -f "$IMAGE" ] || { echo "[ERROR] Image not produced" >&2; exit 1; }
 cp "$IMAGE" "$OUT_DIR/dist/Image"
 
-# CONFIG_KPM=y compiles the SukiSU-Nova KPM bridge, but does not embed
-# KernelPatch's runtime. Inject kpimg into the final Image and prove it.
-bash "$WORK_DIR/scripts/patch-kpm-image.sh" patch \
+# Ensure the bridge target exists in the actual linked kernel symbol table.
+VMLINUX="$OUT_DIR/dist/vmlinux"
+[ -s "$VMLINUX" ] || { echo "[ERROR] vmlinux missing; cannot verify KPM bridge symbol" >&2; exit 1; }
+llvm-nm "$VMLINUX" | grep -Eq '[[:space:]]__arm64_sys_truncate$' || {
+  echo "[ERROR] __arm64_sys_truncate is absent from vmlinux; SukiSU KPM bridge cannot probe KernelPatch" >&2
+  exit 1
+}
+echo "[OK] KPM bridge target __arm64_sys_truncate exists in vmlinux"
+
+# Inject the kpimg built for SukiSU-Nova's matching KernelPatch fork.
+SUKISU_KPM_BRIDGE_HEADER="$KSU_DIR/extension/kpm/bridge.h" \
+  bash "$WORK_DIR/scripts/patch-kpm-image.sh" patch \
   "$OUT_DIR/dist/Image" "$WORK_DIR/kpm-image-proof.txt"
 
 echo "[OK] KPM runtime-injected Image ready: $OUT_DIR/dist/Image"
