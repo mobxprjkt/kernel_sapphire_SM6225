@@ -83,7 +83,7 @@ for flag in required:
         lines.insert(index + 1, flag)
         index += 1
         arm_end += 1
-s = "\\n".join(lines) + "\\n"
+s = "\n".join(lines) + "\n"
 p.write_text(s)
 
 # Assert both flags are in ARM64 CFLAGS before the first X86_CFLAGS declaration.

@@ -125,3 +125,10 @@ no-PIC/no-PIE flags and linker assertions are preserved.
 This archive has passed local ZIP integrity and shell syntax checks only; run
 GitHub Actions to validate the complete KPM build, image injection, AnyKernel3
 packaging, and artifact upload.
+
+
+## v11 — preserve real newlines in patched KernelPatch Makefile
+
+The v10 run still stopped at `Makefile:1: TARGET_COMPILE not set`. Inspection of the exact `stg` commit revealed the underlying cause: the embedded Python patch used a double-escaped `\\n` join, writing literal backslash-n characters instead of actual line breaks into KernelPatch's Makefile. That collapsed the Makefile into one physical line, so the `ifndef TARGET_COMPILE` guard could not be evaluated correctly. v11 changes the Python write to `"\\n".join(lines) + "\\n"`, which emits actual newline characters, and exports `TARGET_COMPILE` while also passing it to make. The ARM64 no-stack-protector/no-PIC/no-PIE flags and linker assertions remain unchanged.
+
+Local validation: shell syntax, embedded Python syntax, and ZIP integrity. A fresh Actions run is still required to validate kpimg, kptools, Image injection, AnyKernel3 packaging, and upload.
