@@ -121,12 +121,23 @@ IMAGE="$OUT_DIR/dist/arch/arm64/boot/Image"
 cp "$IMAGE" "$OUT_DIR/dist/Image"
 
 # Ensure the bridge target exists in the actual linked kernel symbol table.
+# Do NOT pipe llvm-nm directly into grep -q: grep may exit as soon as it finds
+# the symbol, causing llvm-nm to receive SIGPIPE and report a misleading
+# "LLVM ERROR: IO failure on output stream: Broken pipe".
 VMLINUX="$OUT_DIR/dist/vmlinux"
 [ -s "$VMLINUX" ] || { echo "[ERROR] vmlinux missing; cannot verify KPM bridge symbol" >&2; exit 1; }
-llvm-nm "$VMLINUX" | grep -Eq '[[:space:]]__arm64_sys_truncate$' || {
-  echo "[ERROR] __arm64_sys_truncate is absent from vmlinux; SukiSU KPM bridge cannot probe KernelPatch" >&2
+VMLINUX_NM="$OUT_DIR/dist/vmlinux.nm"
+echo "[CHECK] Dumping complete vmlinux symbol table"
+llvm-nm "$VMLINUX" > "$VMLINUX_NM" || {
+  echo "[ERROR] llvm-nm failed while reading vmlinux" >&2
   exit 1
 }
+if ! grep -Eq '[[:space:]]__arm64_sys_truncate$' "$VMLINUX_NM"; then
+  echo "[ERROR] __arm64_sys_truncate is absent from vmlinux; SukiSU KPM bridge cannot probe KernelPatch" >&2
+  echo "[INFO] Nearby truncate symbols, if any:"
+  grep -E 'truncate|sys_.*truncate' "$VMLINUX_NM" | head -40 || true
+  exit 1
+fi
 echo "[OK] KPM bridge target __arm64_sys_truncate exists in vmlinux"
 
 # Inject the kpimg built for SukiSU-Nova's matching KernelPatch fork.
