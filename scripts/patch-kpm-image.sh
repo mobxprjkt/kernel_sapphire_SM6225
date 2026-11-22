@@ -97,7 +97,12 @@ PYMAKE
     grep -Fq 'CFLAGS += -fno-pic -fno-pie' "$KP_MAKEFILE" || die "ARM64 no-PIC/no-PIE flags were not inserted"
     echo "[KPM] Verified ARM64 CFLAGS: -fno-stack-protector -fno-pic -fno-pie"
     echo "[KPM] Building fixed-address freestanding ARM64 kpimg without stack protector or GOT/PLT"
-    make -C "$STAGE/kernelpatch/kernel" TARGET_COMPILE=aarch64-linux-gnu- -j"$(nproc)"
+    # KernelPatch checks TARGET_COMPILE at Makefile parse time. Export it into
+    # the make process as well as passing it on the command line so wrappers
+    # and nested make invocations inherit the same bare-metal cross prefix.
+    export TARGET_COMPILE="aarch64-linux-gnu-"
+    [[ "$TARGET_COMPILE" == "aarch64-linux-gnu-" ]] || die "Invalid TARGET_COMPILE: $TARGET_COMPILE"
+    make -C "$STAGE/kernelpatch/kernel" TARGET_COMPILE="$TARGET_COMPILE" -j"$(nproc)"
     # A freestanding kpimg must not retain compiler-generated stack-check
     # runtime calls. Inspect every ARM64 object before allowing the final link.
     OBJECT_SYMBOLS="$STAGE/kernelpatch/kernel/arm64-object-undefined-symbols.txt"

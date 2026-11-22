@@ -109,3 +109,19 @@ remain intact; no GOT section is accepted or silently discarded.
 This is a targeted correction based on the actual Actions log. It still
 requires a new Actions run to validate the resulting `kpimg` link, kptools
 build, Image injection, and AnyKernel3 packaging.
+
+
+## v10 — KernelPatch TARGET_COMPILE environment fix
+
+The Actions run `45034650043` completed the Linux 5.15 Image build and confirmed
+`__arm64_sys_truncate` exists, then stopped while parsing KernelPatch's
+`kernel/Makefile` with `TARGET_COMPILE not set`. The pinned KernelPatch Makefile
+checks this variable before defining its cross tools. The KPM build script now
+exports `TARGET_COMPILE=aarch64-linux-gnu-` into the process environment and
+also passes it explicitly to `make`, ensuring the prefix is visible at Makefile
+parse time and to nested build commands. The prior no-stack-protector and
+no-PIC/no-PIE flags and linker assertions are preserved.
+
+This archive has passed local ZIP integrity and shell syntax checks only; run
+GitHub Actions to validate the complete KPM build, image injection, AnyKernel3
+packaging, and artifact upload.
