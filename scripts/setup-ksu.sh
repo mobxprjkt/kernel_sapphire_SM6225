@@ -110,6 +110,9 @@ fi
 # in fs/susfs.c: fsnotify_alloc_group() takes one argument on this kernel.
 bash "$WORK_DIR/scripts/fix-susfs-515.sh" fs/susfs.c
 
+# Register AVC Log Spoofing (feature ID 10003) against SUSFS inline static key.
+bash "$WORK_DIR/scripts/apply-avc-spoof-515.sh"
+
 # Link SukiSU-Nova into the kernel build.
 [ -e drivers/kernelsu ] || ln -s ../SukiSU-Nova/kernel drivers/kernelsu
 grep -q 'obj-.*kernelsu' drivers/Makefile || \

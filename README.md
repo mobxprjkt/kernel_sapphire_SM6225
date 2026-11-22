@@ -41,3 +41,23 @@ The build now fails if `olddefconfig` drops `CONFIG_KPM=y`, `CONFIG_KALLSYMS=y`,
 ## AnyKernel3 settings
 
 The generated installer uses `do.devicecheck=1`, `do.modules=0`, `do.systemless=0`, `do.cleanup=1`, `do.cleanuponabort=0`, device names `sapphiren` and `sapphire`, Android versions `13-17`, and the requested `init_boot_a` split/flash versus boot dump/write flow.
+
+
+## AVC Log Spoofing (experimental Linux 5.15 integration)
+
+- Adds SukiSU-Nova feature ID `10003` (`avc_spoof`).
+- Connects the Manager feature handler to SUSFS inline static key
+  `susfs_is_avc_log_spoofing_enabled`.
+- Uses the AVC-only changes from SukiSU-Nova PR #1058, pinned to head
+  `119983f4dd8ca79dc69324cd358a73e104e35ab1` and base
+  `4bec532dd447e2852aa8932afa768255350c103a`.
+- The PR is open/unmerged and its author reports testing on Linux 5.4.
+  This builder deliberately excludes its Linux <5.10 SELinux-hide compatibility
+  changes; only the AVC handler and required registration changes are applied.
+- The build verifies the handler source and emits `avc-spoof-build-proof.txt`.
+  This is not proof of runtime behavior. Confirm the Manager reports
+  **AVC Log Spoofing: Supported** after booting the resulting kernel.
+
+The AnyKernel3 installer retains the requested device checks (`sapphiren`,
+`sapphire`), Android 13–17 support, boot partition flow, and exact properties
+from the supplied installer specification.

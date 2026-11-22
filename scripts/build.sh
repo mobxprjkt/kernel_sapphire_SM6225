@@ -90,6 +90,18 @@ printf '%s\n' \
   > "$WORK_DIR/kpm-build-proof.txt"
 echo "[OK] KPM config and implementation sources verified"
 
+AVC_SOURCE="$KERNEL_SRC/drivers/kernelsu/feature/avc_spoof.c"
+AVC_HEADER="$KERNEL_SRC/drivers/kernelsu/feature/avc_spoof.h"
+for source in "$AVC_SOURCE" "$AVC_HEADER"; do
+  [ -s "$source" ] || {
+    echo "[ERROR] AVC Log Spoofing source missing: $source" >&2
+    exit 1
+  }
+done
+grep -q 'KSU_FEATURE_AVC_SPOOF = 10003' "$KERNEL_SRC/drivers/kernelsu/include/uapi/feature.h"
+grep -q 'ksu_avc_spoof_init();' "$KERNEL_SRC/drivers/kernelsu/ksu_main.c"
+echo "[OK] AVC Log Spoofing feature ID 10003 and handler source verified"
+
 echo "[BUILD] Image only — no unrelated optional modules"
 LOG="${WORK_DIR}/build.log"
 if ! make "${MAKE_FLAGS[@]}" Image 2>&1 | tee "$LOG"; then
