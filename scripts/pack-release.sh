@@ -13,36 +13,30 @@ mkdir -p ./release_zips
 
 if [ "$ZIP_MODE" = "aio" ] || [ "$ZIP_MODE" = "both" ]; then
   [ "$BUILD_TYPE" = "testing" ] && SUFFIX="-testing" || SUFFIX=""
-  # AIO bundles all GKI variants — use major.minor only, not per-source sublevel
+  # AIO layout retained; this project now publishes only the SukiSU-Nova build.
   _series=$(echo "${KERNEL_VERSION:-5.15.x}" | grep -oP '^\d+\.\d+' || echo "5.15")
   AIO_NAME="AK3-ALL-${_series}-$(date +'%Y-%m')${SUFFIX}.zip"
 
-  echo "[AIO] Building single AK3 zip with all images..."
+  echo "[AIO] Building the SukiSU-Nova AK3 bundle..."
   git clone --depth=1 "$AK3_REPO" ak3_aio
+  cp "${GITHUB_WORKSPACE}/anykernel/anykernel.sh" ak3_aio/anykernel.sh
 
-  # Extract Image from each variant and rename to named image per artifact dir
+  # Extract the SukiSU-Nova Image and keep the AIO naming convention.
   for ARTIFACT_DIR in ./artifacts/*/; do
     ARTIFACT_ZIP=$(find "$ARTIFACT_DIR" -name "AK3-*.zip" | head -1)
     [ -f "$ARTIFACT_ZIP" ] || continue
 
-    # Derive named image from artifact dir name
-    # artifact dirs: gki-ksun, gki-sksu, gki-nksu
-    DIR_NAME=$(basename "$ARTIFACT_DIR")
-    case "$DIR_NAME" in
-      gki-ksun)  IMG_NAME="Image.gki.ksu"   ;;
-      gki-sksu)  IMG_NAME="Image.gki.sksu"  ;;
-      gki-nksu) IMG_NAME="Image.gki.noksu" ;;
-      *)         IMG_NAME="Image.$(echo "$DIR_NAME" | tr -d '-')" ;;
-    esac
+    IMG_NAME="Image.gki.sksu"
 
     echo "[AIO] Extracting Image from: $ARTIFACT_ZIP → $IMG_NAME"
     unzip -o "$ARTIFACT_ZIP" "Image" -d /tmp/aio_extract/ 2>/dev/null || continue
     cp /tmp/aio_extract/Image "ak3_aio/${IMG_NAME}"
+    cp /tmp/aio_extract/Image "ak3_aio/Image"
     rm -rf /tmp/aio_extract
   done
 
   echo "[AIO] Images collected:"
-  ls -lh ak3_aio/Image.gki.* 2>/dev/null || { echo "[ERROR] No named images found"; exit 1; }
+  ls -lh ak3_aio/Image.gki.sksu 2>/dev/null || { echo "[ERROR] No named images found"; exit 1; }
 
   cd ak3_aio
   zip -r9 "../release_zips/${AIO_NAME}" * -x .git/*

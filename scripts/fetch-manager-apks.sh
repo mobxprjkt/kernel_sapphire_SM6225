@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # fetch-manager-apks.sh — pull manager APK from upstream CI artifact, attach to release
-# env: GITHUB_TOKEN, KSUN_MANAGER_ARTIFACT_ID, KSUN_MANAGER_SPOOFED_ARTIFACT_ID, SKSU_MANAGER_ARTIFACT_ID
+# env: GITHUB_TOKEN, SKSU_MANAGER_ARTIFACT_ID, SKSU_MANAGER_SPOOFED_ARTIFACT_ID
 set -e
 
 mkdir -p ./manager_apks
@@ -58,7 +58,5 @@ _fetch() {
   echo "[OK] $(basename "$apk") ($(du -h "$dest" | cut -f1))"
 }
 
-_fetch "KernelSU-Next/KernelSU-Next" "${KSUN_MANAGER_ARTIFACT_ID:-}"         "ksun"
-_fetch "KernelSU-Next/KernelSU-Next" "${KSUN_MANAGER_SPOOFED_ARTIFACT_ID:-}" "ksun-spoofed"
 _fetch "SukiSU-Nova/SukiSU-Nova" "${SKSU_MANAGER_ARTIFACT_ID:-}" "sksu"
 _fetch "SukiSU-Nova/SukiSU-Nova" "${SKSU_MANAGER_SPOOFED_ARTIFACT_ID:-}" "sksu-spoofed"

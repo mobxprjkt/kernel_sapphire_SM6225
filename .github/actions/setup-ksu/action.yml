@@ -8,12 +8,8 @@ inputs:
     required: true
   work_dir:
     required: true
-  ksun_tag_pin:
-    description: "Optional exact KSU-Next tag to checkout instead of floating HEAD (used by check-updates.yml verify gate)"
-    required: false
-    default: ""
   sksu_tag_pin:
-    description: "Optional exact SukiSU-Nova tag to checkout instead of floating HEAD (used by check-updates.yml verify gate)"
+    description: "Optional exact SukiSU-Nova ref to checkout instead of floating builtin branch"
     required: false
     default: ""
 
@@ -25,6 +21,5 @@ runs:
         KSU_TYPE:     ${{ inputs.ksu_type }}
         KERNEL_DIR:   ${{ inputs.kernel_dir }}
         WORK_DIR:     ${{ inputs.work_dir }}
-        KSUN_TAG_PIN: ${{ inputs.ksun_tag_pin }}
         SKSU_TAG_PIN: ${{ inputs.sksu_tag_pin }}
       run: bash ${{ github.workspace }}/scripts/setup-ksu.sh

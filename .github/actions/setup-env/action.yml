@@ -1,5 +1,5 @@
 name: setup-env
-description: install deps, record timestamps, copy apply_patch helper
+description: install build dependencies and record timestamps
 
 runs:
   using: composite
@@ -15,4 +15,3 @@ runs:
           gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi \
           zstd\
           dwarves
-        cp ${{ github.workspace }}/scripts/apply_patch.sh /tmp/apply_patch.sh

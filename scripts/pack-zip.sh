@@ -25,26 +25,22 @@ case "${SOURCE_TYPE}" in
 esac
 
 case "${KSU_TYPE}" in
-  ksun) KSU_LABEL="KSU-Next" ;;
   sksu) KSU_LABEL="SukiSU-Nova" ;;
-  none) KSU_LABEL="NoKSU"   ;;
   *)    KSU_LABEL="${KSU_TYPE}" ;;
 esac
 
 [ "$BUILD_TYPE" = "testing" ] && SUFFIX="-testing" || SUFFIX=""
-ZIP_NAME="AK3-${SRC_LABEL}-${KSU_LABEL}-${KERNEL_VERSION}-$(date +'%Y-%m')${SUFFIX}.zip"
+ZIP_NAME="AK3-Sapphiren-SukiSU-Nova-${KERNEL_VERSION}-$(date +'%Y-%m')${SUFFIX}.zip"
 
 # Named image used by AIO pack-release.sh when extracting
 case "$KSU_TYPE" in
-  ksun) IMAGE_NAME="Image.gki.ksu"  ;;
   sksu) IMAGE_NAME="Image.gki.sksu" ;;
-  none) IMAGE_NAME="Image.gki.noksu";;
   *)    IMAGE_NAME="Image"          ;;
 esac
 
 cd "$WORK_DIR"
 git clone --depth=1 "$AK3_REPO" ak3_tmp
-[ -d "${GITHUB_WORKSPACE}/anykernel/ramdisk" ] && cp -r "${GITHUB_WORKSPACE}/anykernel/ramdisk/." "ak3_tmp/ramdisk/"
+cp "${GITHUB_WORKSPACE}/anykernel/anykernel.sh" "ak3_tmp/anykernel.sh"
 
 # Per-variant ZIP: only Image (for flashing) — no named copy to keep size lean
 cp "$IMAGE" "ak3_tmp/Image"

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # setup-ksu.sh — integrate KSU variant + SUSFS into kernel source
-# env: KSU_TYPE (ksun|sksu|none), KERNEL_DIR, WORK_DIR
+# env: KSU_TYPE (sksu only), KERNEL_DIR, WORK_DIR
 # optional env: KSUN_TAG_PIN, SKSU_TAG_PIN — if set, checkout that exact tag
 #   instead of floating branch HEAD. Used only by check-updates.yml's verify
 #   gate to test a specific candidate tag before it's committed to

@@ -29,7 +29,7 @@ _clean_log() {
 if [ -s /tmp/build_jobs.tsv ]; then
   while IFS=$'\t' read -r JOB_ID JOB_NAME; do
     [ -n "$JOB_ID" ] || continue
-    # Extract variant part after " / " — e.g. "GKI-KSU-Next / GKI-KSU-Next" → "GKI-KSU-Next"
+    # Sanitize the build job name for the log filename.
     SAFE=$(echo "$JOB_NAME" | sed 's|.* / ||' | sed 's/[^a-zA-Z0-9._-]/_/g' | sed 's/__*/_/g; s/^_//; s/_$//')
     echo "[LOG] Fetching audit log for $JOB_NAME ($JOB_ID) -> ${SAFE}.log"
     gh api --allow-escape-sequences "/repos/${GITHUB_REPOSITORY}/actions/jobs/${JOB_ID}/logs" \
