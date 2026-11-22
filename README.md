@@ -67,3 +67,12 @@ The generated installer uses `do.devicecheck=1`, `do.modules=0`, `do.systemless=
 The AnyKernel3 installer retains the requested device checks (`sapphiren`,
 `sapphire`), Android 13–17 support, boot partition flow, and exact properties
 from the supplied installer specification.
+
+
+## AnyKernel3 template
+
+This builder embeds and uses the AnyKernel3 archive supplied by the user in
+`AnyKernel3/`. The packaging step copies that template as-is and adds only the
+freshly built, KPM-patched `Image`. It does not clone or replace AnyKernel3
+from another repository, and it preserves the supplied `anykernel.sh`
+settings, helper binaries, modules, and install logic.
