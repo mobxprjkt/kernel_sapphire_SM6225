@@ -46,16 +46,19 @@ The generated installer uses `do.devicecheck=1`, `do.modules=0`, `do.systemless=
 ## AVC Log Spoofing (experimental Linux 5.15 integration)
 
 - Adds SukiSU-Nova feature ID `10003` (`avc_spoof`).
-- Connects the Manager feature handler to the existing SUSFS GKI 5.15 shared
-  boolean `susfs_is_avc_log_spoofing_enabled` (the selected branch does not
-  define a jump-label static key).
+- Detects the actual SUSFS GKI 5.15 AVC state ABI after patching. It supports
+  both a shared boolean (`READ_ONCE`/`WRITE_ONCE`) and a shared
+  `static_key_false` (`static_key_enabled`/`static_branch_enable`/`disable`).
+  The Manager handler is wired to the exact state used by the AVC audit hook
+  and SUSFS control path.
 - Uses the AVC-only changes from SukiSU-Nova PR #1058, pinned to head
   `119983f4dd8ca79dc69324cd358a73e104e35ab1` and base
   `4bec532dd447e2852aa8932afa768255350c103a`.
 - The PR is open/unmerged and its author reports testing on Linux 5.4.
   This builder deliberately excludes its Linux <5.10 SELinux-hide compatibility
   changes; only the AVC handler and required registration changes are applied.
-- The build verifies the handler source and emits `avc-spoof-build-proof.txt`.
+- The build validates the state definition, AVC audit hook, and SUSFS control path,
+  then verifies the ABI-matched handler and emits `avc-spoof-build-proof.txt`.
   This is not proof of runtime behavior. Confirm the Manager reports
   **AVC Log Spoofing: Supported** after booting the resulting kernel.
 
