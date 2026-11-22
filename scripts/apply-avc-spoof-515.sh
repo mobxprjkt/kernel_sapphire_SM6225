@@ -31,7 +31,7 @@ CURRENT_SHA="$(git -C "$KSU_DIR" rev-parse HEAD)"
 }
 
 # Validate the actual SUSFS GKI 5.15 ABI before changing SukiSU.
-# This branch defines and consumes a plain bool in avc.c/fs/susfs.c.
+# The file-scope bool may be explicitly initialized or rely on C zero-init.
 python3 - "$AVC_SOURCE" "$SUSFS_SOURCE" <<'PY'
 from pathlib import Path
 import re, sys
@@ -40,8 +40,20 @@ avc = Path(sys.argv[1]).read_text()
 susfs = Path(sys.argv[2]).read_text()
 symbol = "susfs_is_avc_log_spoofing_enabled"
 
-if not re.search(rf"\bbool\s+{symbol}\s*=\s*false\s*;", avc):
-    raise SystemExit("[ERROR] SUSFS GKI 5.15 bool definition is missing from security/selinux/avc.c")
+# A file-scope C bool is zero-initialized even when the patch omits
+# an explicit "= false" initializer. Accept both valid definitions, but
+# do not mistake an extern declaration for the actual storage definition.
+definition = re.search(
+    rf"(?m)^\s*bool\s+{symbol}\s*(?:=\s*(?:false|0))?\s*;",
+    avc,
+)
+if not definition:
+    matches = [line.strip() for line in avc.splitlines() if symbol in line]
+    detail = " | ".join(matches[:5]) if matches else "symbol not found in avc.c"
+    raise SystemExit(
+        "[ERROR] SUSFS GKI 5.15 AVC bool definition not recognized in "
+        f"security/selinux/avc.c ({detail})"
+    )
 if not re.search(rf"sad->tsid\s*==\s*susfs_ksu_sid\s*&&\s*{symbol}", avc):
     raise SystemExit("[ERROR] SUSFS AVC audit spoof hook is missing or has an unexpected form")
 if "bypass_orig_flow:" not in avc:
