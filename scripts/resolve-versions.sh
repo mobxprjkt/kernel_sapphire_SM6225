@@ -83,13 +83,14 @@ KSUN_MANAGER_SPOOFED_ARTIFACT_ID=$([ -n "$_kr" ] && \
   | jq -r '.artifacts[] | select(.name == "manager-spoofed") | .id // empty' | head -1 || true)  
 
 _sksu_find_run() {
-  # Upstream build-manager.yml run at the exact SukiSU commit the kernel was
-  # built from. If not found (e.g. on builtin branch where manager builds aren't triggered),
-  # fall back to the latest successful build-manager run on main.
+  # The upstream manager is built by .github/workflows/manager.yml.
+  # Prefer the run for the exact SukiSU source SHA used by this kernel; if no
+  # matching run exists (for example, a built-in integration), use the latest
+  # successful manager workflow run on main.
   local sha="$1" run_id=""
   if [ -n "$sha" ]; then
     run_id=$(curl -sf --max-time 15 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-      "https://api.github.com/repos/SukiSU-Nova/SukiSU-Nova/actions/workflows/build-manager.yml/runs?head_sha=${sha}&status=success&per_page=1" \
+      "https://api.github.com/repos/SukiSU-Nova/SukiSU-Nova/actions/workflows/manager.yml/runs?head_sha=${sha}&status=success&per_page=1" \
       | jq -r '.workflow_runs[0].id // empty' 2>/dev/null | tr -d '[:space:]' || true)
   fi
   if [ -n "$run_id" ]; then
@@ -97,7 +98,7 @@ _sksu_find_run() {
     return 0
   fi
   curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-    "https://api.github.com/repos/SukiSU-Nova/SukiSU-Nova/actions/workflows/build-manager.yml/runs?status=success&branch=main&per_page=1" \
+    "https://api.github.com/repos/SukiSU-Nova/SukiSU-Nova/actions/workflows/manager.yml/runs?status=success&branch=main&per_page=1" \
     | jq -r '.workflow_runs[0].id // empty' 2>/dev/null | tr -d '[:space:]' || true
 }
 _sr=$(_sksu_find_run "$SKSU_SHA")
@@ -109,10 +110,7 @@ SKSU_MANAGER_ARTIFACT_ID=$([ -n "$_sr" ] && \
   "https://api.github.com/repos/SukiSU-Nova/SukiSU-Nova/actions/runs/${_sr}/artifacts" \
   | jq -r '.artifacts[] | select(.name == "Manager") | select(.expired == false) | .id // empty' | head -1 || true)
 
-SKSU_MANAGER_SPOOFED_ARTIFACT_ID=$([ -n "$_sr" ] && \
-  curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-  "https://api.github.com/repos/SukiSU-Nova/SukiSU-Nova/actions/runs/${_sr}/artifacts" \
-  | jq -r '.artifacts[] | select(.name == "Manager-spoofed") | select(.expired == false) | .id // empty' | head -1 || true)
+SKSU_MANAGER_SPOOFED_ARTIFACT_ID="" # Upstream manager.yml currently publishes only the Manager artifact.
 
 DATE_TAG=$(date +'%Y%m%d')
 
