@@ -1,0 +1,221 @@
+name: Fetch Manager APKs
+
+on:
+  workflow_dispatch:
+    inputs:
+      ksun_branch:
+        description: "KernelSU-Next manager branch"
+        required: true
+        default: "dev"
+        type: string
+      sksu_branch:
+        description: "SukiSU-Nova manager branch"
+        required: true
+        default: "main"
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: fetch-manager-apks
+  cancel-in-progress: false
+
+jobs:
+  fetch-managers:
+    name: Fetch all 4 Manager APKs
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Verify upstream token
+        env:
+          GH_TOKEN: ${{ secrets.UPSTREAM_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::Missing UPSTREAM_TOKEN repository secret. Create a fine-grained PAT with Actions: Read access to KernelSU-Next and SukiSU-Nova, then add it as UPSTREAM_TOKEN."
+            exit 1
+          fi
+
+          status=$(curl -sS -o /tmp/user.json -w '%{http_code}' \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/user)
+
+          if [ "$status" != "200" ]; then
+            echo "::error::UPSTREAM_TOKEN authentication failed (HTTP ${status}). Verify that the PAT is valid and has not expired."
+            exit 1
+          fi
+
+          echo "UPSTREAM_TOKEN authenticated successfully."
+
+      - name: Find successful upstream runs and download APKs
+        env:
+          GH_TOKEN: ${{ secrets.UPSTREAM_TOKEN }}
+          KSUN_BRANCH: ${{ inputs.ksun_branch }}
+          SKSU_BRANCH: ${{ inputs.sksu_branch }}
+        run: |
+          python3 <<'PY'
+          import io
+          import json
+          import os
+          import sys
+          import urllib.error
+          import urllib.request
+          import zipfile
+
+          TOKEN = os.environ.get("GH_TOKEN", "").strip()
+          HEADERS = {
+              "Accept": "application/vnd.github+json",
+              "Authorization": f"Bearer {TOKEN}",
+              "X-GitHub-Api-Version": "2022-11-28",
+              "User-Agent": "kernel-manager-artifact-fetcher",
+          }
+
+          def api(url, binary=False):
+              req = urllib.request.Request(url, headers=HEADERS)
+              try:
+                  with urllib.request.urlopen(req, timeout=60) as response:
+                      body = response.read()
+              except urllib.error.HTTPError as exc:
+                  detail = exc.read().decode("utf-8", "replace")
+                  raise RuntimeError(
+                      f"GitHub API {exc.code} for {url}: {exc.reason}. "
+                      f"{detail or 'Check UPSTREAM_TOKEN validity and repository access.'}"
+                  ) from exc
+              except urllib.error.URLError as exc:
+                  raise RuntimeError(f"Could not reach GitHub API for {url}: {exc.reason}") from exc
+              return body if binary else json.loads(body)
+
+          def get_runs(repo, branch, workflow=None):
+              if workflow:
+                  url = f"https://api.github.com/repos/{repo}/actions/workflows/{workflow}/runs?branch={branch}&status=completed&per_page=100"
+              else:
+                  url = f"https://api.github.com/repos/{repo}/actions/runs?branch={branch}&status=completed&per_page=100"
+              runs = api(url).get("workflow_runs", [])
+              return [
+                  run for run in runs
+                  if run.get("conclusion") == "success"
+                  and (workflow is not None or run.get("path", "").endswith("/build-manager.yml"))
+              ]
+
+          def find_artifacts(repo, runs, aliases, label):
+              for run in runs:
+                  run_id = run["id"]
+                  try:
+                      data = api(f"https://api.github.com/repos/{repo}/actions/runs/{run_id}/artifacts")
+                  except Exception as exc:
+                      print(f"::warning::Cannot inspect {label} run {run_id}: {exc}")
+                      continue
+
+                  found = {}
+                  for artifact in data.get("artifacts", []):
+                      if artifact.get("expired"):
+                          continue
+                      artifact_name = artifact.get("name", "").casefold()
+                      for wanted, names in aliases.items():
+                          if artifact_name in {name.casefold() for name in names} and wanted not in found:
+                              found[wanted] = artifact["id"]
+
+                  if all(key in found for key in aliases):
+                      print(f"Selected {label} run: {run_id} ({run.get('html_url', '')})")
+                      return found
+
+                  missing = [key for key in aliases if key not in found]
+                  print(f"Skipping {label} run {run_id}; missing artifacts: {', '.join(missing)}")
+
+              raise RuntimeError(f"No successful {label} run contains all required manager artifacts.")
+
+          def download_apk(repo, artifact_id, output_name):
+              url = f"https://api.github.com/repos/{repo}/actions/artifacts/{artifact_id}/zip"
+              raw = api(url, binary=True)
+              with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+                  candidates = [
+                      name for name in archive.namelist()
+                      if name.lower().endswith(".apk") and not name.endswith("/")
+                  ]
+                  if not candidates:
+                      raise RuntimeError(f"Artifact {artifact_id} contains no APK.")
+                  candidates.sort(key=lambda name: (
+                      "arm64-v8a" not in name.lower(),
+                      "universal" not in name.lower(),
+                      len(name),
+                  ))
+                  with open(output_name, "wb") as output:
+                      output.write(archive.read(candidates[0]))
+              if os.path.getsize(output_name) < 1024:
+                  raise RuntimeError(f"Downloaded APK looks invalid: {output_name}")
+              print(f"Downloaded {output_name} ({os.path.getsize(output_name)} bytes)")
+
+          os.makedirs("manager_apks", exist_ok=True)
+          jobs = [
+              {
+                  "repo": "KernelSU-Next/KernelSU-Next",
+                  "branch": os.environ["KSUN_BRANCH"],
+                  "workflow": "build-manager-ci.yml",
+                  "label": "KernelSU-Next",
+                  "aliases": {
+                      "normal": ["manager"],
+                      "spoofed": ["manager-spoofed", "manager_spoofed"],
+                  },
+                  "files": {
+                      "normal": "manager_apks/KernelSU-Next-manager.apk",
+                      "spoofed": "manager_apks/KernelSU-Next-manager-spoofed.apk",
+                  },
+              },
+              {
+                  "repo": "SukiSU-Nova/SukiSU-Nova",
+                  "branch": os.environ["SKSU_BRANCH"],
+                  "workflow": None,
+                  "label": "SukiSU-Nova",
+                  "aliases": {
+                      "normal": ["Manager"],
+                      "spoofed": ["Manager-spoofed", "Manager_spoofed"],
+                  },
+                  "files": {
+                      "normal": "manager_apks/SukiSU-Nova-manager.apk",
+                      "spoofed": "manager_apks/SukiSU-Nova-manager-spoofed.apk",
+                  },
+              },
+          ]
+
+          try:
+              for job in jobs:
+                  runs = get_runs(job["repo"], job["branch"], job["workflow"])
+                  if not runs:
+                      raise RuntimeError(f"No successful {job['label']} manager workflow found on branch {job['branch']}.")
+                  artifact_ids = find_artifacts(job["repo"], runs, job["aliases"], job["label"])
+                  for kind, artifact_id in artifact_ids.items():
+                      download_apk(job["repo"], artifact_id, job["files"][kind])
+
+              apk_files = [
+                  name for name in os.listdir("manager_apks")
+                  if name.lower().endswith(".apk")
+              ]
+              if len(apk_files) != 4:
+                  raise RuntimeError(f"Expected exactly 4 APKs, found {len(apk_files)}.")
+              print("All 4 Manager APKs downloaded successfully.")
+          except Exception as exc:
+              print(f"::error::{exc}")
+              sys.exit(1)
+          PY
+
+      - name: Upload Manager APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: manager-apks
+          path: manager_apks/*.apk
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Show artifact summary
+        run: |
+          echo "## Manager APKs" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          for apk in manager_apks/*.apk; do
+            echo "- **$(basename "$apk")** — $(du -h "$apk" | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
+          done
