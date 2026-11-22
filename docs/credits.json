@@ -44,12 +44,6 @@
       "github": "TheWildJames"
     },
     {
-      "name": "maxsteeel",
-      "url": "https://github.com/maxsteeel/nomount",
-      "description": "NoMount",
-      "github": "maxsteeel"
-    },
-    {
       "name": "pershoot",
       "url": "https://github.com/pershoot/KernelSU-Next",
       "description": "KSU-Next & SUSFS fork",
@@ -84,12 +78,6 @@
       "url": "https://github.com/ravindu644/droidspaces",
       "description": "Droidspaces",
       "github": "ravindu644"
-    },
-    {
-      "name": "vc-teahouse",
-      "url": "https://github.com/vc-teahouse/Baseband-guard",
-      "description": "Baseband Guard",
-      "github": "vc-teahouse"
     },
     {
       "name": "osm0sis",

@@ -2,10 +2,10 @@
 
 | Variant | Source | Root | Extras |
 |---------|--------|------|--------|
-| GKI-Ksun | AOSP LTS | KernelSU-Next + SUSFS | BBG |
+| GKI-Ksun | AOSP LTS | KernelSU-Next + SUSFS | — |
 | GKI-SukiSU | AOSP LTS | SukiSU-Nova + SUSFS | — |
 | GKI-NoKSU | AOSP LTS | Vanilla | — |
-| GKI-Legacy-Ksun | AOSP 2023-10 (legacy) | KernelSU-Next + SUSFS | BBG |
+| GKI-Legacy-Ksun | AOSP 2023-10 (legacy) | KernelSU-Next + SUSFS | — |
 | GKI-Legacy-SukiSU | AOSP 2023-10 (legacy) | SukiSU-Nova + SUSFS | — |
 | GKI-Legacy-NoKSU | AOSP 2023-10 (legacy) | Vanilla | — |
 

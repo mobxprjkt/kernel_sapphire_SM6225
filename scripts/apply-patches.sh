@@ -12,7 +12,7 @@ set -e
 source /tmp/apply_patch.sh
 cd "$KERNEL_SRC"
 
-# gki-legacy: WildKernels + KSU/BBG/NoMount only — skip common/testing
+# gki-legacy: WildKernels + KSU only — skip common/testing
 [ "$SOURCE_TYPE" = "gki-legacy" ] && echo "[GKI-LEGACY] Skipping common/testing patches — WildKernels block follows"
 
 # WildKernels patches

@@ -85,29 +85,6 @@ jobs:
           set -o pipefail
           bash scripts/apply-patches.sh
 
-      - name: "Setup NoMount"
-        working-directory: ${{ env.KERNEL_SRC }}
-        run: |
-          # Pin NoMount to a reviewed commit so upstream dev changes cannot
-          # silently alter the VFS compatibility surface between builds.
-          NOMOUNT_COMMIT="2e696f6dabd24617285119b39a90129663f8d711"
-          curl -LSs "https://raw.githubusercontent.com/maxsteeel/nomount/${NOMOUNT_COMMIT}/kernel/setup.sh" \
-            | bash -s "${NOMOUNT_COMMIT}"
-
-      - name: "Setup BBG"
-        if: inputs.ksu_type == 'ksun'
-        working-directory: ${{ env.KERNEL_SRC }}
-        run: |
-          git clone -q --depth=1 https://github.com/vc-teahouse/Baseband-guard.git
-          ln -sf ../Baseband-guard security/baseband-guard
-          grep -q "baseband-guard" security/Makefile || \
-            echo 'obj-$(CONFIG_BBG) += baseband-guard/' >> security/Makefile
-          sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' \
-            security/Kconfig
-          grep -q "baseband-guard/Kconfig" security/Kconfig || \
-            sed -i '/source "security\/keys\/Kconfig"/a source "security/baseband-guard/Kconfig"' \
-            security/Kconfig
-
       - name: "Setup KSU + SUSFS"
         if: inputs.ksu_type != 'none'
         uses: ./.github/actions/setup-ksu

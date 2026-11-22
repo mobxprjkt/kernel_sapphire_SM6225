@@ -46,7 +46,7 @@ cp "${KO_DIR}/zsmalloc.ko" "$STAGE_DIR/module/zsmalloc.ko"
 [ -f "${KO_DIR}/cfg80211.ko" ] && cp "${KO_DIR}/cfg80211.ko" "$STAGE_DIR/module/cfg80211.ko"
 # cfg80211 overlay — replaces vendor cfg80211 with GKI build at boot
 # Both /vendor/lib/modules and /vendor_dlkm/lib/modules need covering:
-# vendor_dlkm is a separate erofs partition loaded at t=4s before NoMount
+# vendor_dlkm is a separate erofs partition; overlay it alongside vendor
 if [ -f "${KO_DIR}/cfg80211.ko" ]; then
   mkdir -p "$STAGE_DIR/system/vendor/lib/modules"
   cp "${KO_DIR}/cfg80211.ko" "$STAGE_DIR/system/vendor/lib/modules/cfg80211.ko"
