@@ -1,0 +1,111 @@
+name: Sapphire Kernel Build — SukiSU-Nova + SUSFS + KPM
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  WORK_DIR: ${{ github.workspace }}
+  KERNEL_SRC: ${{ github.workspace }}/kernel_src
+  SOURCE_TYPE: gki
+  DEFCONFIG: vendor/sapphire_defconfig
+  CCACHE_DIR: ${{ runner.temp }}/ccache
+  CCACHE_MAXSIZE: 5G
+  KSU_TYPE: sksu
+
+concurrency:
+  group: sapphire-kernel-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build Linux 5.15 — Sapphire
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout builder
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            aria2 bc bison build-essential ccache flex git libelf-dev libssl-dev \
+            curl jq zstd dwarves zip patch python3 gcc-aarch64-linux-gnu \
+            gcc-arm-linux-gnueabi
+
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-${{ runner.os }}-${{ github.ref_name }}-${{ hashFiles('scripts/setup-toolchain.sh') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ccache-${{ runner.os }}-${{ github.ref_name }}-${{ hashFiles('scripts/setup-toolchain.sh') }}-
+            ccache-${{ runner.os }}-${{ github.ref_name }}-
+            ccache-${{ runner.os }}-
+
+      - name: Configure ccache
+        run: |
+          ccache --version
+          ccache --max-size="$CCACHE_MAXSIZE"
+          ccache --set-config=compiler_check=content
+          ccache --show-stats
+
+      - name: Clone kernel source
+        run: bash scripts/clone-source.sh
+
+      - name: Validate source and defconfig
+        run: |
+          test -f "$KERNEL_SRC/Makefile"
+          test -f "$KERNEL_SRC/arch/arm64/configs/$DEFCONFIG" || {
+            echo "Missing defconfig: arch/arm64/configs/$DEFCONFIG" >&2
+            exit 1
+          }
+          grep -q '^VERSION = 5$' "$KERNEL_SRC/Makefile"
+          grep -q '^PATCHLEVEL = 15$' "$KERNEL_SRC/Makefile"
+          echo "Source and $DEFCONFIG validated"
+
+      - name: Install Neutron Clang
+        run: bash scripts/setup-toolchain.sh
+
+      - name: Integrate SukiSU-Nova and SUSFS for Linux 5.15
+        env:
+          KERNEL_DIR: ${{ github.workspace }}/kernel_src
+        run: bash scripts/setup-ksu.sh
+
+      - name: Enable SukiSU-Nova, SUSFS and KPM
+        run: |
+          DEFCONFIG="$KERNEL_SRC/arch/arm64/configs/$DEFCONFIG" \
+            bash scripts/setup-configs.sh
+
+      - name: Build kernel Image
+        run: bash scripts/build.sh
+
+      - name: Verify Linux 5.15 Image
+        run: bash scripts/verify-kernel.sh
+
+      - name: Package AnyKernel3 ZIP
+        run: bash scripts/pack-zip.sh
+
+      - name: Print ccache statistics
+        if: always()
+        run: ccache --show-stats || true
+
+      - name: Upload Image and AnyKernel3 ZIP
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sapphire-SukiSU-Nova-SUSFS-KPM
+          path: |
+            AK3-Sapphire-SukiSU-Nova-SUSFS-KPM-*.zip
+            out/dist/Image
+            out/dist/kernel_version.txt
+            sksu_tag.txt
+            sksu_sha.txt
+          if-no-files-found: error
+          retention-days: 14

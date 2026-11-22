@@ -1,41 +1,34 @@
-# Sapphire Kernel — SukiSU-Nova + SUSFS + KPM
+# Sapphire Linux 5.15 — SukiSU-Nova + SUSFS + KPM
 
-Minimal GitHub Actions build project for Redmi Note 13 4G/NFC (Sapphire/Sapphiren),
-using Android 13 GKI Linux 5.15.
+A minimal GitHub Actions kernel builder for Xiaomi Redmi Note 13 4G (Sapphire).
 
-## Included features
+## Fixed build configuration
 
-- SukiSU-Nova
-- SUSFS, using the `gki-android13-5.15` integration branch
-- KPM (`CONFIG_KPM=y`)
-- Neutron Clang toolchain
-- ccache (5 GB GitHub Actions cache, restored between runs)
-- AnyKernel3 flashable ZIP packaging
+- Source: `https://github.com/The-Angel-Place-Sapphire/kernel_xiaomi_sapphire.git`
+- Branch: `lineage-23.2`
+- Defconfig: `vendor/sapphire_defconfig`
+- Kernel series: Linux 5.15 (validated before build and after Image creation)
+- Toolchain: Neutron Clang `06092026`
+- Root: SukiSU-Nova (`builtin` branch)
+- SUSFS: `gki-android13-5.15`
+- KPM: enabled through SukiSU-Nova Kconfig
+- Cache: ccache, 5 GB, persisted using GitHub Actions cache
+- Output: kernel `Image` and device-configured AnyKernel3 ZIP
 
-Other root solutions, optional kernel feature patches, extra governors, NTSYNC,
-NoMount, Baseband Guard, manager APK builds, and unrelated workflows have been
-removed from this build project.
+## Run
 
-## Kernel configuration
+1. Upload/extract this project into the repository root.
+2. Keep only `.github/workflows/build.yml` as the workflow file.
+3. Open **Actions → Sapphire Kernel Build — SukiSU-Nova + SUSFS + KPM**.
+4. Select **Run workflow** on the `stg` branch.
+5. Download artifact `Sapphire-SukiSU-Nova-SUSFS-KPM` when successful.
 
-The build uses `arch/arm64/configs/vendor/deconfig_sapphire` as its defconfig.
+The workflow is a single standalone `workflow_dispatch` file; it does not call a reusable workflow.
 
-## Build
+## Included features only
 
-1. Open **Actions**.
-2. Select **Build Sapphire — SukiSU-Nova + SUSFS + KPM**.
-3. Run workflow. The first build populates ccache; later builds can reuse cached compiler objects.
-4. Download the `sapphire-sksu-susfs-kpm` artifact.
-5. Flash the AnyKernel3 ZIP from recovery.
+SukiSU-Nova, SUSFS, KPM, Neutron Clang, ccache, and AnyKernel3 packaging. Unrelated root systems, NTSYNC, Baseband Guard, NoMount, extra patch stacks, and optional feature workflows are not included.
 
-## Compatibility note
+## Important
 
-The SUSFS integration includes a Linux 5.15 compatibility adjustment:
-`fsnotify_alloc_group()` is called with the one-argument API declared by this
-kernel series. This project has not been compiled or boot-tested in this
-environment; the next GitHub Actions run is required to validate the full
-upstream SukiSU-Nova/SUSFS source combination.
-
-## License
-
-See [LICENSE](LICENSE).
+This ZIP contains the builder scripts and one GitHub Actions workflow. The full kernel source is cloned by the workflow at build time; it is not bundled in this ZIP. SUSFS integration and the complete kernel build must still pass on GitHub Actions before the resulting ZIP can be considered tested or safe to flash. Always keep a known-good boot image available.
