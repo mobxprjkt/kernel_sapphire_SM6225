@@ -11,7 +11,6 @@ env:
   KERNEL_SRC: ${{ github.workspace }}/kernel_src
   SOURCE_TYPE: gki
   DEFCONFIG: vendor/sapphire_defconfig
-  CCACHE_DIR: ${{ runner.temp }}/ccache
   CCACHE_MAXSIZE: 5G
   KSU_TYPE: sksu
 
@@ -51,6 +50,9 @@ jobs:
 
       - name: Configure ccache
         run: |
+          export CCACHE_DIR="$RUNNER_TEMP/ccache"
+          mkdir -p "$CCACHE_DIR"
+          echo "CCACHE_DIR=$CCACHE_DIR" >> "$GITHUB_ENV"
           ccache --version
           ccache --max-size="$CCACHE_MAXSIZE"
           ccache --set-config=compiler_check=content
