@@ -110,6 +110,7 @@ jobs:
             sksu_tag.txt
             sksu_sha.txt
             kpm-build-proof.txt
+            kpm-image-proof.txt
             avc-spoof-build-proof.txt
           if-no-files-found: error
           retention-days: 14

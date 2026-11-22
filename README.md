@@ -11,7 +11,7 @@ A minimal GitHub Actions kernel builder for Xiaomi Redmi Note 13 4G (Sapphire).
 - Toolchain: Neutron Clang `06092026`
 - Root: SukiSU-Nova (`builtin` branch)
 - SUSFS: `gki-android13-5.15`
-- KPM: enabled through SukiSU-Nova Kconfig; final .config must retain CONFIG_KPM, CONFIG_KALLSYMS and CONFIG_KALLSYMS_ALL, with KPM source files present
+- KPM: SukiSU-Nova KPM bridge enabled with CONFIG_KPM=y; KernelPatch 0.13.9 kpimg is injected into the final Image and verified with kptools
 - Cache: ccache, 5 GB, persisted using GitHub Actions cache
 - Output: kernel `Image` and device-configured AnyKernel3 ZIP (device check sapphiren/sapphire; Android 13–17; boot install flow as requested)
 
@@ -36,7 +36,7 @@ This ZIP contains the builder scripts and one GitHub Actions workflow. The full 
 
 ## KPM validation
 
-The build now fails if `olddefconfig` drops `CONFIG_KPM=y`, `CONFIG_KALLSYMS=y`, or `CONFIG_KALLSYMS_ALL=y`, or if the SukiSU-Nova KPM implementation sources are absent. `kpm-build-proof.txt` is uploaded with the artifact. This proves build configuration/source presence, not runtime KPM support by itself; after flashing, confirm the Manager reports KPM as Supported.
+The build fails if `olddefconfig` drops `CONFIG_KPM=y`, `CONFIG_KALLSYMS=y`, or `CONFIG_KALLSYMS_ALL=y`, or if the SukiSU-Nova KPM bridge sources are absent. After compiling, the workflow injects the pinned KernelPatch 0.13.9 `kpimg` runtime into the final `Image`, checks the result with `kptools-linux -l`, and requires `patched=true`. `kpm-image-proof.txt` records the tool/payload hashes and exact final Image SHA-256; verification runs again before AnyKernel3 packaging. This confirms the expected build-time runtime injection, but the Manager's KPM status and module loading still need to be tested on the device after flashing.
 
 ## AnyKernel3 settings
 

@@ -20,6 +20,10 @@ done
 }
 echo "[OK] KPM + kallsyms final config verified"
 
+# Require the actual KernelPatch runtime in Image, not just CONFIG_KPM=y.
+bash "$WORK_DIR/scripts/patch-kpm-image.sh" verify \
+  "$IMAGE" "$WORK_DIR/kpm-image-proof.txt"
+
 VERSION_FULL=$(strings "$IMAGE" | grep "Linux version [0-9]" | head -1)
 echo "$VERSION_FULL"
 

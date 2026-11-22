@@ -113,6 +113,12 @@ fi
 IMAGE="$OUT_DIR/dist/arch/arm64/boot/Image"
 [ -f "$IMAGE" ] || { echo "[ERROR] Image not produced" >&2; exit 1; }
 cp "$IMAGE" "$OUT_DIR/dist/Image"
-echo "[OK] Image ready: $OUT_DIR/dist/Image"
+
+# CONFIG_KPM=y compiles the SukiSU-Nova KPM bridge, but does not embed
+# KernelPatch's runtime. Inject kpimg into the final Image and prove it.
+bash "$WORK_DIR/scripts/patch-kpm-image.sh" patch \
+  "$OUT_DIR/dist/Image" "$WORK_DIR/kpm-image-proof.txt"
+
+echo "[OK] KPM runtime-injected Image ready: $OUT_DIR/dist/Image"
 echo "[CCACHE] Statistics after build:"
 ccache --show-stats || true

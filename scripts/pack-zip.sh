@@ -4,6 +4,8 @@ set -euo pipefail
 : "${WORK_DIR:?}"
 IMAGE="${WORK_DIR}/out/dist/Image"
 [ -f "$IMAGE" ] || { echo "[ERROR] Image not found: $IMAGE" >&2; exit 1; }
+bash "$WORK_DIR/scripts/patch-kpm-image.sh" verify \
+  "$IMAGE" "$WORK_DIR/kpm-image-proof.txt"
 
 AK3_REPO="https://github.com/osm0sis/AnyKernel3.git"
 cd "$WORK_DIR"
