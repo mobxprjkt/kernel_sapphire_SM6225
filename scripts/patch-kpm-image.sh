@@ -67,24 +67,36 @@ anchor = "CFLAGS += -DANDROID"
 lines = s.splitlines()
 if lines.count(anchor) != 1:
     raise SystemExit(f"[KPM ERROR] Expected exactly one exact ARM64 CFLAGS line, found {lines.count(anchor)}")
-# Do not test for the generic substring '-fno-stack-protector': the upstream
-# Makefile already has it in X86_CFLAGS, which caused the previous fix to
-# silently skip ARM64. Require the exact ARM64 CFLAGS assignment instead.
-arm_flag = "CFLAGS += -fno-stack-protector"
-if arm_flag not in lines:
-    index = lines.index(anchor)
-    lines.insert(index + 1, arm_flag)
-    s = "\n".join(lines) + "\n"
+
+# kpimg is a freestanding, fixed-address ARM64 payload. Ubuntu's cross-GCC
+# may default to PIE; that emits GOT/PLT relocations which kpimg.lds rejects.
+# Disable both stack protector and PIC/PIE for ARM64 C compilation only.
+required = [
+    "CFLAGS += -fno-stack-protector",
+    "CFLAGS += -fno-pic -fno-pie",
+]
+index = lines.index(anchor)
+arm_end = next((i for i in range(index + 1, len(lines)) if lines[i].startswith("X86_CFLAGS")), len(lines))
+arm_section = lines[index + 1:arm_end]
+for flag in required:
+    if flag not in arm_section:
+        lines.insert(index + 1, flag)
+        index += 1
+        arm_end += 1
+s = "\\n".join(lines) + "\\n"
 p.write_text(s)
-# Assert the ARM64 assignment occurs after its own CFLAGS anchor, not merely
-# somewhere in the file (X86_CFLAGS is a separate compiler path).
-arm_section = s.split(anchor, 1)[1]
-if arm_flag not in arm_section.split("X86_CFLAGS", 1)[0]:
-    raise SystemExit("[KPM ERROR] ARM64 -fno-stack-protector flag is not in the ARM64 CFLAGS section")
+
+# Assert both flags are in ARM64 CFLAGS before the first X86_CFLAGS declaration.
+arm_section = s.split(anchor, 1)[1].split("X86_CFLAGS", 1)[0]
+for flag in required:
+    if flag not in arm_section:
+        raise SystemExit(f"[KPM ERROR] Missing ARM64 compiler flag: {flag}")
+
 PYMAKE
     grep -Fq 'CFLAGS += -fno-stack-protector' "$KP_MAKEFILE" || die "ARM64 stack protector flag was not inserted"
-    echo "[KPM] Verified ARM64 CFLAGS contains -fno-stack-protector (X86_CFLAGS check is not accepted)"
-    echo "[KPM] Building kpimg for ARM64 (stack protector disabled for freestanding payload)"
+    grep -Fq 'CFLAGS += -fno-pic -fno-pie' "$KP_MAKEFILE" || die "ARM64 no-PIC/no-PIE flags were not inserted"
+    echo "[KPM] Verified ARM64 CFLAGS: -fno-stack-protector -fno-pic -fno-pie"
+    echo "[KPM] Building fixed-address freestanding ARM64 kpimg without stack protector or GOT/PLT"
     make -C "$STAGE/kernelpatch/kernel" TARGET_COMPILE=aarch64-linux-gnu- -j"$(nproc)"
     # A freestanding kpimg must not retain compiler-generated stack-check
     # runtime calls. Inspect every ARM64 object before allowing the final link.

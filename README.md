@@ -93,3 +93,19 @@ The `bk` branch integrates SukiSU-Nova from its `builtin` branch and enables `CO
 The previous v7 patch had a detection bug: upstream `kernel/Makefile` already contained `-fno-stack-protector` in `X86_CFLAGS`, so a generic substring check incorrectly concluded the ARM64 compiler flags were fixed. v8 checks and inserts the exact `CFLAGS += -fno-stack-protector` assignment in the ARM64 CFLAGS section, then scans all ARM64 object files for unresolved `__stack_chk_guard` / `__stack_chk_fail` before accepting `kpimg`.
 
 This is a source-level build fix, not a claim that a full GitHub Actions build or device boot has already passed.
+
+
+## v9 — fix KernelPatch GOT/PLT linker failure
+
+The GitHub Actions run 45033755763 reached the ARM64 `kpimg.elf` link stage.
+The stack-protector references were gone, but `kpimg.lds` rejected `.got.plt`
+and `.got` with `Unexpected GOT/PLT entries detected!` and `Unexpected GOT
+detected!`. The upstream ARM64 `CFLAGS` did not disable PIC/PIE, while the
+Ubuntu cross-GCC toolchain can default to PIE. v9 adds `-fno-pic -fno-pie`
+to the ARM64 freestanding `CFLAGS`, separately from the x86 flags, and
+verifies both flags before building. The linker script's zero-GOT assertions
+remain intact; no GOT section is accepted or silently discarded.
+
+This is a targeted correction based on the actual Actions log. It still
+requires a new Actions run to validate the resulting `kpimg` link, kptools
+build, Image injection, and AnyKernel3 packaging.
