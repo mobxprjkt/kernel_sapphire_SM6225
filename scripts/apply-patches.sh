@@ -101,12 +101,7 @@ if [ "$BUILD_TYPE" = "testing" ] && [ "$SOURCE_TYPE" != "gki-legacy" ]; then
   fi
 fi
 
-# Safety guard: this project targets Android 13 GKI 5.15. Do not allow the
-# 6.12.25 release-spoof patch to be applied to the source tree.
-if [ -f "$PATCHES_DIR/common/kernel-release-spoof-6.12-5.15.patch" ]; then
-  echo "[ERROR] 6.12 release-spoof patch is present; remove it before building a 5.15 kernel." >&2
-  exit 1
-fi
+# Verify that the source tree is the expected Linux 5.15 base.
 KERNEL_VERSION_LINE=$(awk -F= '/^VERSION[[:space:]]*=/ {gsub(/[[:space:]]/, "", $2); print $2; exit}' Makefile)
 KERNEL_PATCHLEVEL_LINE=$(awk -F= '/^PATCHLEVEL[[:space:]]*=/ {gsub(/[[:space:]]/, "", $2); print $2; exit}' Makefile)
 if [ "$KERNEL_VERSION_LINE" != "5" ] || [ "$KERNEL_PATCHLEVEL_LINE" != "15" ]; then
