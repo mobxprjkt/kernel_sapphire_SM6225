@@ -56,7 +56,23 @@ case "$MODE" in
     done
     grep -q 'SUKISU_KPM_ABI_VERSION 2' "$SUKISU_KPM_BRIDGE_HEADER" || die "SukiSU-Nova bridge ABI is not v2"
 
-    echo "[KPM] Building kpimg for ARM64"
+    echo "[KPM] Preparing freestanding kpimg compiler flags"
+    KP_MAKEFILE="$STAGE/kernelpatch/kernel/Makefile"
+    [[ -s "$KP_MAKEFILE" ]] || die "KernelPatch kernel Makefile is missing"
+    python3 - "$KP_MAKEFILE" <<'PY'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1])
+s = p.read_text()
+marker = "CFLAGS += -DANDROID"
+if marker not in s:
+    raise SystemExit("[KPM ERROR] Cannot locate ARM64 CFLAGS anchor in KernelPatch Makefile")
+addition = marker + "\n# kpimg is a freestanding payload: host distro stack-protector defaults\n# emit __stack_chk_guard/__stack_chk_fail references with no runtime provider.\nCFLAGS += -fno-stack-protector"
+if "-fno-stack-protector" not in s:
+    s = s.replace(marker, addition, 1)
+p.write_text(s)
+PY
+    grep -q -- '-fno-stack-protector' "$KP_MAKEFILE" || die "Failed to disable stack protector for freestanding kpimg"
+    echo "[KPM] Building kpimg for ARM64 (stack protector disabled for freestanding payload)"
     make -C "$STAGE/kernelpatch/kernel" TARGET_COMPILE=aarch64-linux-gnu- -j"$(nproc)"
     KPIMG="$STAGE/kernelpatch/kernel/kpimg"
     [[ -s "$KPIMG" ]] || die "Matching ARM64 kpimg was not produced"

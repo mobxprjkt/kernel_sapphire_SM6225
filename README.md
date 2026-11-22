@@ -76,3 +76,11 @@ This builder embeds and uses the AnyKernel3 archive supplied by the user in
 freshly built, KPM-patched `Image`. It does not clone or replace AnyKernel3
 from another repository, and it preserves the supplied `anykernel.sh`
 settings, helper binaries, modules, and install logic.
+
+## KPM v7 build fix
+
+The pinned KernelPatch ARM64 `kpimg` Makefile is patched at build time to add
+`-fno-stack-protector` to its ARM64 CFLAGS. This avoids host GCC distro defaults
+emitting unresolved `__stack_chk_guard` and `__stack_chk_fail` references in
+the freestanding kpimg payload. This does not change the kernel's own stack
+protector configuration or the supplied AnyKernel3 installer.
