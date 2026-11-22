@@ -13,4 +13,4 @@ jobs:
     with:
       variant_name: "Sapphire SukiSU-Nova + SUSFS + KPM"
       artifact_name: "sapphire-sksu-susfs-kpm"
-      defconfig: "gki_defconfig"
+      defconfig: "vendor/sapphire_defconfig"

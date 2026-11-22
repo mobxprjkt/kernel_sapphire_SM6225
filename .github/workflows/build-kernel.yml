@@ -28,6 +28,8 @@ jobs:
       WORK_DIR: ${{ github.workspace }}
       KERNEL_SRC: ${{ github.workspace }}/kernel_src
       SOURCE_TYPE: gki
+      CCACHE_DIR: ${{ runner.temp }}/ccache
+      CCACHE_MAXSIZE: 5G
       KSU_TYPE: sksu
       DEFCONFIG: ${{ inputs.defconfig }}
     steps:
@@ -40,8 +42,23 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
-            aria2 bc bison build-essential flex git libelf-dev libssl-dev \
+            aria2 bc bison build-essential ccache flex git libelf-dev libssl-dev \
             curl jq zstd dwarves zip patch gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-${{ runner.os }}-${{ github.ref_name }}-${{ hashFiles('scripts/setup-toolchain.sh') }}
+          restore-keys: |
+            ccache-${{ runner.os }}-${{ github.ref_name }}-
+            ccache-${{ runner.os }}-
+
+      - name: Show ccache configuration
+        run: |
+          ccache --version
+          ccache --max-size="$CCACHE_MAXSIZE"
+          ccache --show-stats
 
       - name: Clone Linux 5.15 GKI source
         run: bash scripts/clone-source.sh
@@ -65,6 +82,10 @@ jobs:
 
       - name: Build kernel
         run: bash scripts/build.sh
+
+      - name: Show ccache statistics
+        if: always()
+        run: ccache --show-stats || true
 
       - name: Verify kernel
         run: bash scripts/verify-kernel.sh

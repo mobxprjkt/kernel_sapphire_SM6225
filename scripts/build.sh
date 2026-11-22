@@ -19,7 +19,9 @@ MAKE_FLAGS=(
   SUBARCH=arm64
   LLVM=1
   LLVM_IAS=1
-  CC=clang
+  CC="ccache clang"
+  HOSTCC="ccache clang"
+  HOSTCXX="ccache clang++"
   LD=ld.lld
   AR=llvm-ar
   NM=llvm-nm
@@ -38,6 +40,12 @@ MAKE_FLAGS=(
 )
 
 mkdir -p "$OUT_DIR/dist"
+export CCACHE_DIR="${CCACHE_DIR:-${WORK_DIR}/.ccache}"
+export CCACHE_BASEDIR="${WORK_DIR}"
+export CCACHE_COMPILERCHECK=content
+export CCACHE_MAXSIZE="${CCACHE_MAXSIZE:-5G}"
+mkdir -p "$CCACHE_DIR"
+ccache --zero-stats || true
 cd "$KERNEL_SRC"
 
 # Enforce the real source series; no Linux 6.12 release spoofing/backport stack.
@@ -75,3 +83,5 @@ IMAGE="$OUT_DIR/dist/arch/arm64/boot/Image"
 [ -f "$IMAGE" ] || { echo "[ERROR] Image not produced" >&2; exit 1; }
 cp "$IMAGE" "$OUT_DIR/dist/Image"
 echo "[OK] Image ready: $OUT_DIR/dist/Image"
+echo "[CCACHE] Statistics after build:"
+ccache --show-stats || true

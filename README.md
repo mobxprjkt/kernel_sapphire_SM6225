@@ -8,16 +8,23 @@ using Android 13 GKI Linux 5.15.
 - SukiSU-Nova
 - SUSFS, using the `gki-android13-5.15` integration branch
 - KPM (`CONFIG_KPM=y`)
+- Neutron Clang toolchain
+- ccache (5 GB GitHub Actions cache, restored between runs)
+- AnyKernel3 flashable ZIP packaging
 
 Other root solutions, optional kernel feature patches, extra governors, NTSYNC,
 NoMount, Baseband Guard, manager APK builds, and unrelated workflows have been
 removed from this build project.
 
+## Kernel configuration
+
+The build uses `arch/arm64/configs/vendor/deconfig_sapphire` as its defconfig.
+
 ## Build
 
 1. Open **Actions**.
 2. Select **Build Sapphire — SukiSU-Nova + SUSFS + KPM**.
-3. Run workflow.
+3. Run workflow. The first build populates ccache; later builds can reuse cached compiler objects.
 4. Download the `sapphire-sksu-susfs-kpm` artifact.
 5. Flash the AnyKernel3 ZIP from recovery.
 
